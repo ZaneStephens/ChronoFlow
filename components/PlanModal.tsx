@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { Task, Client, RecurringActivity, RecurrenceFrequency } from '../types';
 import { X, CalendarPlus, Zap, CheckSquare, Repeat, Trash2, CalendarDays } from 'lucide-react';
 
@@ -32,6 +33,27 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
   const [monthDay, setMonthDay] = useState<number>(1);
   const [nthWeek, setNthWeek] = useState<number>(1);
   const [nthWeekDay, setNthWeekDay] = useState<number>(1); // 1=Mon
+
+  // --- Logic for Sorting and Top Clients ---
+  const sortedClients = useMemo(() => 
+    [...clients].sort((a, b) => a.name.localeCompare(b.name)), 
+  [clients]);
+
+  const { topClients, otherClients } = useMemo(() => {
+     const counts: Record<string, number> = {};
+     tasks.forEach(t => counts[t.clientId] = (counts[t.clientId] || 0) + 1);
+     
+     const topIds = Object.keys(counts)
+        .filter(id => counts[id] > 0)
+        .sort((a, b) => counts[b] - counts[a])
+        .slice(0, 3);
+        
+     const top = topIds.map(id => clients.find(c => c.id === id)).filter((c): c is Client => !!c);
+     const other = sortedClients.filter(c => !topIds.includes(c.id));
+     
+     return { topClients: top, otherClients: other };
+  }, [tasks, clients, sortedClients]);
+  // ---
 
   useEffect(() => {
     if (isOpen) {
@@ -103,6 +125,13 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
           startTime: baseDate.getTime()
         });
     } else {
+        // Calculate start date for recurrence anchor
+        const d = initialTime ? new Date(initialTime) : new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const startDateStr = `${y}-${m}-${day}`;
+
         const rule: Partial<RecurringActivity> = {
             type,
             taskId: type === 'task' ? selectedTaskId : undefined,
@@ -111,6 +140,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
             startTimeStr: timeStr,
             durationMinutes: duration,
             frequency,
+            startDate: startDateStr
         };
 
         if (frequency === 'weekly') rule.weekDays = weekDays;
@@ -151,7 +181,9 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                     const title = rule.type === 'task' ? task?.title : rule.quickTitle;
                     
                     let freqText: string = rule.frequency;
+                    if (rule.frequency === 'daily') freqText = 'Daily (M-F)';
                     if (rule.frequency === 'weekly') freqText = 'Weekly';
+                    if (rule.frequency === 'fortnightly') freqText = 'Fortnightly';
                     if (rule.frequency === 'monthly') freqText = 'Monthly';
                     if (rule.frequency === 'monthly-nth') freqText = 'Monthly (Nth)';
 
@@ -272,8 +304,8 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                         Recurrence Pattern
                     </h4>
                     
-                    <div className="flex gap-2">
-                        {(['daily', 'weekly', 'monthly', 'monthly-nth'] as RecurrenceFrequency[]).map(freq => (
+                    <div className="flex flex-wrap gap-2">
+                        {(['daily', 'weekly', 'fortnightly', 'monthly', 'monthly-nth'] as RecurrenceFrequency[]).map(freq => (
                             <button
                                 key={freq}
                                 onClick={() => setFrequency(freq)}
@@ -283,7 +315,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                                     : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
                                 }`}
                             >
-                                {freq === 'monthly-nth' ? 'Nth Weekday' : freq}
+                                {freq === 'monthly-nth' ? 'Nth Weekday' : freq === 'daily' ? 'Daily (Mon-Fri)' : freq}
                             </button>
                         ))}
                     </div>
@@ -306,6 +338,12 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {frequency === 'fortnightly' && (
+                        <div className="text-sm text-slate-400 italic">
+                            Repeats every 2 weeks starting from {initialTime ? new Date(initialTime).toLocaleDateString() : new Date().toLocaleDateString()}.
                         </div>
                     )}
 
@@ -363,7 +401,26 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                     >
                         All
                     </button>
-                    {clients.map(c => (
+                    
+                    {/* Top Clients */}
+                    {topClients.map(c => (
+                        <button
+                        key={c.id}
+                        onClick={() => setFilterClient(c.id)}
+                        className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border transition-colors ${filterClient === c.id ? 'text-white border-current' : 'border-slate-700 text-slate-500'}`}
+                        style={{ borderColor: filterClient === c.id ? c.color : undefined, backgroundColor: filterClient === c.id ? `${c.color}20` : undefined }}
+                        >
+                        {c.name}
+                        </button>
+                    ))}
+
+                    {/* Divider */}
+                    {topClients.length > 0 && otherClients.length > 0 && (
+                        <div className="w-px h-5 bg-slate-700 mx-1 self-center"></div>
+                    )}
+
+                    {/* Other Clients */}
+                    {otherClients.map(c => (
                         <button
                         key={c.id}
                         onClick={() => setFilterClient(c.id)}
@@ -415,9 +472,14 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                     <option value="">-- No Client / Internal --</option>
-                    {clients.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
+                    {topClients.length > 0 && (
+                        <optgroup label="Frequently Used">
+                        {topClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </optgroup>
+                    )}
+                    <optgroup label="All Clients">
+                        {otherClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </optgroup>
                     </select>
                 </div>
                 </div>

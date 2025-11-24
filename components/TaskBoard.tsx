@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { Task, Subtask, Client, ActiveTimer } from '../types';
 import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash } from 'lucide-react';
 import { generateSubtasks } from '../services/geminiService';
@@ -38,6 +39,29 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskClient, setNewTaskClient] = useState('');
   const [newTaskTicket, setNewTaskTicket] = useState('');
+
+  // --- Logic for Sorting and Top Clients ---
+  const sortedClients = useMemo(() => 
+    [...clients].sort((a, b) => a.name.localeCompare(b.name)), 
+  [clients]);
+
+  const { topClients, otherClients } = useMemo(() => {
+     const counts: Record<string, number> = {};
+     tasks.forEach(t => counts[t.clientId] = (counts[t.clientId] || 0) + 1);
+     
+     // Get Top 3 based on task count
+     const topIds = Object.keys(counts)
+        .filter(id => counts[id] > 0)
+        .sort((a, b) => counts[b] - counts[a])
+        .slice(0, 3);
+        
+     const top = topIds.map(id => clients.find(c => c.id === id)).filter((c): c is Client => !!c);
+     const other = sortedClients.filter(c => !topIds.includes(c.id));
+     
+     return { topClients: top, otherClients: other };
+  }, [tasks, clients, sortedClients]);
+
+  // ---
 
   const filteredTasks = selectedClientId === 'all' 
     ? tasks 
@@ -119,7 +143,30 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
           >
             All Clients
           </button>
-          {clients.map(client => (
+          
+          {/* Top Clients */}
+          {topClients.map(client => (
+            <button
+              key={client.id}
+              onClick={() => setSelectedClientId(client.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center space-x-2 ${
+                selectedClientId === client.id 
+                  ? 'bg-slate-700 text-white ring-2 ring-indigo-500' 
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: client.color }}></span>
+              <span>{client.name}</span>
+            </button>
+          ))}
+
+          {/* Separator if needed */}
+          {topClients.length > 0 && otherClients.length > 0 && (
+             <div className="w-px h-6 bg-slate-700 mx-2 flex-shrink-0"></div>
+          )}
+
+          {/* Other Clients */}
+          {otherClients.map(client => (
             <button
               key={client.id}
               onClick={() => setSelectedClientId(client.id)}
@@ -169,7 +216,14 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
               className="flex-1 md:w-48 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">Select Client...</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {topClients.length > 0 && (
+                <optgroup label="Frequently Used">
+                  {topClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </optgroup>
+              )}
+              <optgroup label="All Clients">
+                  {otherClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </optgroup>
             </select>
             <button
               disabled={!newTaskTitle || !newTaskClient}

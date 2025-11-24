@@ -181,6 +181,10 @@ const App: React.FC = () => {
     setClients([...clients, { ...client, id: generateId() }]);
   };
 
+  const updateClient = (updatedClient: Client) => {
+    setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+  };
+
   const deleteClient = (id: string) => {
     setClients(clients.filter(c => c.id !== id));
   };
@@ -642,6 +646,7 @@ const App: React.FC = () => {
                <ClientManager 
                  clients={clients} 
                  onAddClient={addClient}
+                 onUpdateClient={updateClient}
                  onDeleteClient={deleteClient}
                />
              )}

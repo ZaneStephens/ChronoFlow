@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { TimerSession, Task, Client, Subtask, PlannedActivity, RecurringActivity } from '../types';
 import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat } from 'lucide-react';
@@ -141,16 +142,43 @@ const Timeline: React.FC<TimelineProps> = ({
       const dayOfWeek = selectedDate.getDay(); // 0-6
       const dayOfMonth = selectedDate.getDate(); // 1-31
 
-      if (rule.frequency === 'daily') matches = true;
+      // Daily (Mon-Fri)
+      if (rule.frequency === 'daily') {
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) matches = true;
+      }
+
+      // Weekly
       if (rule.frequency === 'weekly' && rule.weekDays?.includes(dayOfWeek)) matches = true;
+
+      // Fortnightly
+      if (rule.frequency === 'fortnightly' && rule.startDate) {
+          const start = new Date(rule.startDate);
+          // Only if selectedDate is ON or AFTER start date
+          if (dayStart.getTime() >= new Date(start.setHours(0,0,0,0)).getTime()) {
+             // Calculate difference in days
+             const oneDay = 24 * 60 * 60 * 1000;
+             // Use timezone agnostic comparison via Date objects at midnight
+             const d1 = new Date(dateKey); // Local YYYY-MM-DD to date
+             const d2 = new Date(rule.startDate);
+             // Must handle local time offsets, simple diff of timestamps at midnight
+             const diffDays = Math.round((d1.getTime() - d2.getTime()) / oneDay);
+             
+             if (diffDays >= 0 && diffDays % 14 === 0) {
+                 matches = true;
+             }
+          }
+      }
+
+      // Monthly
       if (rule.frequency === 'monthly' && rule.monthDay === dayOfMonth) matches = true;
+      
+      // Monthly Nth
       if (rule.frequency === 'monthly-nth') {
           if (rule.nthWeekDay === dayOfWeek) {
                const nth = Math.floor((dayOfMonth - 1) / 7) + 1;
                if (rule.nthWeek === nth) matches = true;
-               // Handle 'Last' (5) special case? For now explicit 5
+               // Handle 'Last' (5) special case
                if (rule.nthWeek === 5) {
-                   // Check if adding 7 days changes the month
                    const nextWeek = new Date(selectedDate);
                    nextWeek.setDate(dayOfMonth + 7);
                    if (nextWeek.getMonth() !== selectedDate.getMonth()) matches = true;

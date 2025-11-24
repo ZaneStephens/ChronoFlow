@@ -1,14 +1,18 @@
+
 import React, { useState } from 'react';
 import { Client } from '../types';
-import { Plus, Trash2, Briefcase, Mail, User, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Briefcase, Mail, User, FileText, ChevronDown, ChevronUp, Edit2, X, Save } from 'lucide-react';
 
 interface ClientManagerProps {
   clients: Client[];
   onAddClient: (client: Omit<Client, 'id'>) => void;
+  onUpdateClient: (client: Client) => void;
   onDeleteClient: (id: string) => void;
 }
 
-const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onDeleteClient }) => {
+const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onUpdateClient, onDeleteClient }) => {
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
   
@@ -19,20 +23,59 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onD
 
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name) return;
-    onAddClient({
-      name,
-      color,
-      contactName,
-      contactEmail,
-      services
-    });
+  // Sort clients A-Z
+  const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
+
+  const handleEditClick = (client: Client) => {
+    setEditingId(client.id);
+    setName(client.name);
+    setColor(client.color);
+    setContactName(client.contactName || '');
+    setContactEmail(client.contactEmail || '');
+    setServices(client.services || '');
+    
+    // Scroll to top to see form
+    const formElement = document.getElementById('client-form');
+    if (formElement) formElement.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    resetForm();
+  };
+
+  const resetForm = () => {
     setName('');
+    setColor('#6366f1');
     setContactName('');
     setContactEmail('');
     setServices('');
+    setEditingId(null);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name) return;
+
+    if (editingId) {
+        onUpdateClient({
+            id: editingId,
+            name,
+            color,
+            contactName,
+            contactEmail,
+            services
+        });
+    } else {
+        onAddClient({
+            name,
+            color,
+            contactName,
+            contactEmail,
+            services
+        });
+    }
+    resetForm();
   };
 
   const toggleExpand = (id: string) => {
@@ -48,11 +91,22 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onD
 
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Form */}
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 h-fit">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Plus size={20} className="text-indigo-400" />
-            Add New Client
-          </h3>
+        <div id="client-form" className={`bg-slate-800 rounded-xl border ${editingId ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-700'} p-6 h-fit transition-all duration-300`}>
+          <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                {editingId ? <Edit2 size={20} className="text-indigo-400" /> : <Plus size={20} className="text-indigo-400" />}
+                {editingId ? 'Edit Client' : 'Add New Client'}
+              </h3>
+              {editingId && (
+                  <button 
+                    onClick={handleCancelEdit}
+                    className="text-slate-400 hover:text-white flex items-center gap-1 text-sm bg-slate-700 px-2 py-1 rounded"
+                  >
+                      <X size={14} /> Cancel
+                  </button>
+              )}
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Client Name *</label>
@@ -111,22 +165,34 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onD
 
             <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg transition-colors mt-2"
+              className={`w-full font-medium py-2 rounded-lg transition-colors mt-2 flex items-center justify-center gap-2 ${
+                  editingId 
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
+                  : 'bg-slate-700 hover:bg-indigo-600 text-white'
+              }`}
             >
-              Create Client
+              {editingId ? <Save size={18} /> : <Plus size={18} />}
+              {editingId ? 'Update Client' : 'Create Client'}
             </button>
           </form>
         </div>
 
         {/* List */}
         <div className="space-y-4">
-          {clients.map(client => {
+          {sortedClients.map(client => {
             const isExpanded = expandedClientId === client.id;
+            const isEditing = editingId === client.id;
+            
             return (
-              <div key={client.id} className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden group hover:border-indigo-500/50 transition-colors">
+              <div 
+                key={client.id} 
+                className={`bg-slate-800/50 rounded-xl border overflow-hidden group transition-all duration-300 ${
+                    isEditing ? 'border-indigo-500 shadow-lg shadow-indigo-900/20 opacity-60 pointer-events-none' : 'border-slate-700 hover:border-indigo-500/50'
+                }`}
+              >
                 <div 
                   className="p-4 flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleExpand(client.id)}
+                  onClick={() => !isEditing && toggleExpand(client.id)}
                 >
                   <div className="flex items-center gap-4">
                     <div 
@@ -148,16 +214,27 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onD
                       </p>
                     </div>
                   </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onDeleteClient(client.id); }}
-                    className="text-slate-600 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                  
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleEditClick(client); }}
+                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                        title="Edit Client"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); onDeleteClient(client.id); }}
+                        className="p-2 text-slate-600 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors"
+                        title="Delete Client"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                  </div>
                 </div>
 
                 {isExpanded && (client.contactName || client.contactEmail || client.services) && (
-                  <div className="px-4 pb-4 pt-0 border-t border-slate-700/50 bg-slate-900/30">
+                  <div className="px-4 pb-4 pt-0 border-t border-slate-700/50 bg-slate-900/30 animate-in slide-in-from-top-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
                         {(client.contactName || client.contactEmail) && (
                             <div className="space-y-2">

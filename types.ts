@@ -1,4 +1,5 @@
 
+
 export interface Client {
   id: string;
   name: string;
@@ -58,10 +59,11 @@ export interface PlannedActivity {
   recurringId?: string; // Link to a RecurringActivity rule if generated from one
 }
 
-export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'monthly-nth';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly' | 'monthly-nth';
 
 export interface RecurringActivity {
   id: string;
+  startDate: string; // YYYY-MM-DD - Anchor for fortnightly calculations
   type: 'task' | 'quick';
   taskId?: string;
   clientId?: string;
