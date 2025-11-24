@@ -199,6 +199,10 @@ const App: React.FC = () => {
     setTasks([newTask, ...tasks]);
   };
 
+  const updateTask = (updatedTask: Task) => {
+    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+  };
+
   const updateTaskStatus = (taskId: string, status: Task['status']) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
   };
@@ -212,6 +216,10 @@ const App: React.FC = () => {
       totalTime: 0
     }));
     setSubtasks([...subtasks, ...subtaskObjects]);
+  };
+
+  const updateSubtaskTitle = (subtaskId: string, title: string) => {
+    setSubtasks(prev => prev.map(s => s.id === subtaskId ? { ...s, title } : s));
   };
 
   const deleteTask = (taskId: string) => {
@@ -678,6 +686,8 @@ const App: React.FC = () => {
                  clients={clients}
                  activeTimer={activeTimer}
                  onAddTask={addTask}
+                 onUpdateTask={updateTask}
+                 onUpdateSubtask={updateSubtaskTitle}
                  onAddSubtasks={addSubtasks}
                  onDeleteTask={deleteTask}
                  onUpdateTaskStatus={updateTaskStatus}

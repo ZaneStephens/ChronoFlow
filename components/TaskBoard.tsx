@@ -1,8 +1,6 @@
-
-
 import React, { useState, useMemo } from 'react';
 import { Task, Subtask, Client, ActiveTimer } from '../types';
-import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye } from 'lucide-react';
+import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye, Pencil, Save, X } from 'lucide-react';
 import { generateSubtasks } from '../services/geminiService';
 
 interface TaskBoardProps {
@@ -11,6 +9,8 @@ interface TaskBoardProps {
   clients: Client[];
   activeTimer: ActiveTimer | null;
   onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'totalTime' | 'status'>) => void;
+  onUpdateTask: (task: Task) => void;
+  onUpdateSubtask: (subtaskId: string, title: string) => void;
   onAddSubtasks: (taskId: string, subtasks: { title: string }[]) => void;
   onDeleteTask: (taskId: string) => void;
   onUpdateTaskStatus: (taskId: string, status: Task['status']) => void;
@@ -25,6 +25,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   clients,
   activeTimer,
   onAddTask,
+  onUpdateTask,
+  onUpdateSubtask,
   onAddSubtasks,
   onDeleteTask,
   onUpdateTaskStatus,
@@ -43,6 +45,16 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskClient, setNewTaskClient] = useState('');
   const [newTaskTicket, setNewTaskTicket] = useState('');
+
+  // Editing Task State
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskData, setEditTaskData] = useState<{title: string, description: string, clientId: string, ticketNumber: string}>({
+      title: '', description: '', clientId: '', ticketNumber: ''
+  });
+
+  // Editing Subtask State
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editSubtaskTitle, setEditSubtaskTitle] = useState('');
 
   // --- Logic for Sorting and Top Clients ---
   const sortedClients = useMemo(() => 
@@ -126,6 +138,47 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     setNewTaskTitle('');
     setNewTaskDesc('');
     setNewTaskTicket('');
+  };
+
+  // --- Edit Task Logic ---
+  const startEditTask = (task: Task) => {
+      setEditingTaskId(task.id);
+      setEditTaskData({
+          title: task.title,
+          description: task.description || '',
+          clientId: task.clientId,
+          ticketNumber: task.ticketNumber || ''
+      });
+  };
+
+  const cancelEditTask = () => {
+      setEditingTaskId(null);
+  };
+
+  const saveEditTask = (taskId: string) => {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      onUpdateTask({
+          ...task,
+          title: editTaskData.title,
+          description: editTaskData.description,
+          clientId: editTaskData.clientId,
+          ticketNumber: editTaskData.ticketNumber
+      });
+      setEditingTaskId(null);
+  };
+
+  // --- Edit Subtask Logic ---
+  const startEditSubtask = (subtask: Subtask) => {
+      setEditingSubtaskId(subtask.id);
+      setEditSubtaskTitle(subtask.title);
+  };
+
+  const saveEditSubtask = (subtaskId: string) => {
+      if (editSubtaskTitle.trim()) {
+          onUpdateSubtask(subtaskId, editSubtaskTitle);
+      }
+      setEditingSubtaskId(null);
   };
 
   const formatDuration = (seconds: number) => {
@@ -285,6 +338,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
           const isExpanded = expandedTasks.has(task.id);
           const isActive = activeTimer?.taskId === task.id && !activeTimer?.subtaskId;
           const isDone = task.status === 'done';
+          const isEditing = editingTaskId === task.id;
           
           // Calculate total time including subtasks
           const aggregatedSubtaskTime = taskSubtasks.reduce((acc, curr) => acc + curr.totalTime, 0);
@@ -302,85 +356,148 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
               <div className="p-4 flex items-center gap-4">
                 <button 
                   onClick={() => toggleTaskExpand(task.id)}
-                  className="text-slate-400 hover:text-white transition-colors"
+                  className="text-slate-400 hover:text-white transition-colors self-start mt-1"
                 >
                   {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                 </button>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span 
-                      className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-900 shrink-0"
-                      style={{ backgroundColor: client?.color || '#cbd5e1' }}
+                  {isEditing ? (
+                      <div className="space-y-3 mb-2 animate-in fade-in duration-200">
+                           <div className="flex flex-col md:flex-row gap-2">
+                               <input 
+                                 type="text" 
+                                 value={editTaskData.title}
+                                 onChange={(e) => setEditTaskData({...editTaskData, title: e.target.value})}
+                                 className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                 placeholder="Task Title"
+                               />
+                               <input 
+                                 type="text" 
+                                 value={editTaskData.ticketNumber}
+                                 onChange={(e) => setEditTaskData({...editTaskData, ticketNumber: e.target.value})}
+                                 className="md:w-32 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                 placeholder="Ticket #"
+                               />
+                           </div>
+                           <div className="flex gap-2">
+                               <select
+                                 value={editTaskData.clientId}
+                                 onChange={(e) => setEditTaskData({...editTaskData, clientId: e.target.value})}
+                                 className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                               >
+                                    {topClients.length > 0 && (
+                                        <optgroup label="Frequently Used">
+                                        {topClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </optgroup>
+                                    )}
+                                    <optgroup label="All Clients">
+                                        {otherClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </optgroup>
+                               </select>
+                           </div>
+                           <textarea 
+                             value={editTaskData.description}
+                             onChange={(e) => setEditTaskData({...editTaskData, description: e.target.value})}
+                             className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 h-20"
+                             placeholder="Description"
+                           />
+                           <div className="flex gap-2 justify-end">
+                                <button onClick={() => saveEditTask(task.id)} className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm transition-colors">
+                                    <Save size={14} /> Save
+                                </button>
+                                <button onClick={cancelEditTask} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors">
+                                    <X size={14} /> Cancel
+                                </button>
+                           </div>
+                      </div>
+                  ) : (
+                      <>
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span 
+                            className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-900 shrink-0"
+                            style={{ backgroundColor: client?.color || '#cbd5e1' }}
+                            >
+                            {client?.name}
+                            </span>
+                            {task.ticketNumber && (
+                            <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded shrink-0">
+                                <Hash size={10} /> {task.ticketNumber}
+                            </span>
+                            )}
+                            <h3 className={`text-lg font-semibold ml-1 truncate ${isDone ? 'text-slate-400 line-through' : 'text-white'}`}>
+                            {task.title}
+                            </h3>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-slate-400">
+                            <span className="flex items-center gap-1 shrink-0">
+                            <Clock size={14} /> {formatDuration(displayTotalTime)}
+                            </span>
+                            {task.description && <span className="truncate max-w-xs hidden sm:block">{task.description}</span>}
+                            {/* Render Documentation Link from first subtask if available */}
+                            {taskSubtasks.length > 0 && (() => {
+                            const firstSub = taskSubtasks[0];
+                            const linkMatch = firstSub.title.match(/(https?:\/\/[^\s]+)/);
+                            if (linkMatch) {
+                                return (
+                                    <a href={linkMatch[0]} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs shrink-0">
+                                        Documentation Link
+                                    </a>
+                                );
+                            }
+                            return null;
+                            })()}
+                        </div>
+                      </>
+                  )}
+                </div>
+
+                {!isEditing && (
+                    <div className="flex items-center gap-2 shrink-0 self-start mt-1">
+                    <button
+                        onClick={() => isActive ? onStopTimer() : onStartTimer(task.id)}
+                        className={`p-2 rounded-full transition-all ${
+                        isActive 
+                            ? 'bg-indigo-500/20 text-indigo-400 animate-pulse ring-1 ring-indigo-500' 
+                            : 'bg-slate-700 text-slate-300 hover:bg-indigo-600 hover:text-white'
+                        }`}
+                        title={isActive ? "Stop Timer" : "Start Timer"}
+                        disabled={isDone}
                     >
-                      {client?.name}
-                    </span>
-                    {task.ticketNumber && (
-                       <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded shrink-0">
-                         <Hash size={10} /> {task.ticketNumber}
-                       </span>
-                    )}
-                    <h3 className={`text-lg font-semibold ml-1 truncate ${isDone ? 'text-slate-400 line-through' : 'text-white'}`}>
-                      {task.title}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-slate-400">
-                    <span className="flex items-center gap-1 shrink-0">
-                      <Clock size={14} /> {formatDuration(displayTotalTime)}
-                    </span>
-                    {task.description && <span className="truncate max-w-xs hidden sm:block">{task.description}</span>}
-                    {/* Render Documentation Link from first subtask if available */}
-                    {taskSubtasks.length > 0 && (() => {
-                      const firstSub = taskSubtasks[0];
-                      const linkMatch = firstSub.title.match(/(https?:\/\/[^\s]+)/);
-                      if (linkMatch) {
-                          return (
-                              <a href={linkMatch[0]} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs shrink-0">
-                                  Documentation Link
-                              </a>
-                          );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                </div>
+                        {isActive ? <PauseIcon /> : <Play size={18} fill="currentColor" />}
+                    </button>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => isActive ? onStopTimer() : onStartTimer(task.id)}
-                    className={`p-2 rounded-full transition-all ${
-                      isActive 
-                        ? 'bg-indigo-500/20 text-indigo-400 animate-pulse ring-1 ring-indigo-500' 
-                        : 'bg-slate-700 text-slate-300 hover:bg-indigo-600 hover:text-white'
-                    }`}
-                    title={isActive ? "Stop Timer" : "Start Timer"}
-                    disabled={isDone}
-                  >
-                    {isActive ? <PauseIcon /> : <Play size={18} fill="currentColor" />}
-                  </button>
+                    <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
 
-                  <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
+                    <button
+                        onClick={() => onUpdateTaskStatus(task.id, isDone ? 'todo' : 'done')}
+                        className={`p-2 rounded-full transition-colors ${
+                            isDone 
+                            ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' 
+                            : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-700'
+                        }`}
+                        title={isDone ? "Mark as Active" : "Mark as Completed"}
+                    >
+                        <CheckCircle2 size={18} />
+                    </button>
 
-                  <button
-                     onClick={() => onUpdateTaskStatus(task.id, isDone ? 'todo' : 'done')}
-                     className={`p-2 rounded-full transition-colors ${
-                         isDone 
-                           ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' 
-                           : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-700'
-                     }`}
-                     title={isDone ? "Mark as Active" : "Mark as Completed"}
-                  >
-                     <CheckCircle2 size={18} />
-                  </button>
-                  
-                  <button
-                    onClick={() => onDeleteTask(task.id)}
-                    className="p-2 rounded-full hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
-                    title="Delete Task"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
+                    <button
+                        onClick={() => startEditTask(task)}
+                        className="p-2 rounded-full hover:bg-slate-700 text-slate-500 hover:text-white transition-colors"
+                        title="Edit Task"
+                    >
+                        <Pencil size={18} />
+                    </button>
+                    
+                    <button
+                        onClick={() => onDeleteTask(task.id)}
+                        className="p-2 rounded-full hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
+                        title="Delete Task"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                    </div>
+                )}
               </div>
 
               {/* Expanded Content (Subtasks) */}
@@ -389,6 +506,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                   <div className="space-y-2">
                     {taskSubtasks.map(subtask => {
                       const isSubActive = activeTimer?.subtaskId === subtask.id;
+                      const isSubEditing = editingSubtaskId === subtask.id;
                       
                       // Check for links in subtask titles
                       const linkMatch = subtask.title.match(/(https?:\/\/[^\s]+)/);
@@ -408,8 +526,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                       }
 
                       return (
-                        <div key={subtask.id} className="flex items-center justify-between group py-2 border-b border-slate-800/50 last:border-0">
-                          <div className="flex items-center gap-3">
+                        <div key={subtask.id} className="flex items-center justify-between group py-2 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/30 px-2 -mx-2 rounded">
+                          <div className="flex items-center gap-3 flex-1">
                             <button onClick={() => onToggleSubtask(subtask.id)} className="text-slate-500 hover:text-indigo-400">
                               {subtask.isCompleted ? (
                                 <CheckCircle2 size={18} className="text-emerald-500" />
@@ -417,12 +535,42 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                 <Circle size={18} />
                               )}
                             </button>
-                            <span className={`${subtask.isCompleted ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
-                              {displayTitle}
-                            </span>
+                            
+                            {isSubEditing ? (
+                                <div className="flex-1 flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        value={editSubtaskTitle}
+                                        onChange={(e) => setEditSubtaskTitle(e.target.value)}
+                                        className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') saveEditSubtask(subtask.id);
+                                            if (e.key === 'Escape') setEditingSubtaskId(null);
+                                        }}
+                                    />
+                                    <button onClick={() => saveEditSubtask(subtask.id)} className="text-indigo-400 hover:text-indigo-300"><CheckSquare size={16} /></button>
+                                    <button onClick={() => setEditingSubtaskId(null)} className="text-slate-500 hover:text-red-400"><X size={16} /></button>
+                                </div>
+                            ) : (
+                                <span className={`${subtask.isCompleted ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                                    {displayTitle}
+                                </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-slate-500 font-mono">{formatDuration(subtask.totalTime)}</span>
+                            
+                            {!isSubEditing && !isDone && (
+                                <button 
+                                    onClick={() => startEditSubtask(subtask)}
+                                    className="p-1.5 text-slate-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
+                                    title="Edit Subtask"
+                                >
+                                    <Pencil size={14} />
+                                </button>
+                            )}
+
                             <button
                               onClick={() => isSubActive ? onStopTimer() : onStartTimer(task.id, subtask.id)}
                               className={`p-1.5 rounded transition-all ${
@@ -430,7 +578,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                   ? 'text-indigo-400 bg-indigo-500/10' 
                                   : 'text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100'
                               }`}
-                              disabled={isDone}
+                              disabled={isDone || isSubEditing}
                             >
                               {isSubActive ? <PauseIcon size={14} /> : <Play size={14} fill="currentColor" />}
                             </button>
