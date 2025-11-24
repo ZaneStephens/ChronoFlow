@@ -11,7 +11,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick }) => {
   const navItems = [
     { id: ViewMode.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard, domId: 'nav-dashboard' },
-    { id: ViewMode.TASKS, label: 'Tasks & Timer', icon: CheckSquare, domId: 'nav-tasks' },
+    { id: ViewMode.TASKS, label: 'Tasks & Tickets', icon: CheckSquare, domId: 'nav-tasks' },
     { id: ViewMode.TIMELINE, label: 'Day Timeline', icon: CalendarClock, domId: 'nav-timeline' },
     { id: ViewMode.CLIENTS, label: 'Clients', icon: Users, domId: 'nav-clients' },
     { id: ViewMode.REPORTS, label: 'Analytics', icon: PieChart, domId: 'nav-reports' },

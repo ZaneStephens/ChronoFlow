@@ -127,59 +127,68 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   return (
     <div id="task-board" className="space-y-6 pb-24">
       {/* Header & Filters */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col gap-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Project Tasks</h2>
-          <p className="text-slate-400 text-sm">Manage your workload and track time precisely.</p>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Tasks and Tickets</h2>
+          <p className="text-slate-400 text-sm mt-1">Manage your workload and track time precisely.</p>
         </div>
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2 md:pb-0">
-          <button
-            onClick={() => setSelectedClientId('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              selectedClientId === 'all' 
-                ? 'bg-indigo-600 text-white' 
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-            }`}
-          >
-            All Clients
-          </button>
-          
-          {/* Top Clients */}
-          {topClients.map(client => (
-            <button
-              key={client.id}
-              onClick={() => setSelectedClientId(client.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center space-x-2 ${
-                selectedClientId === client.id 
-                  ? 'bg-slate-700 text-white ring-2 ring-indigo-500' 
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: client.color }}></span>
-              <span>{client.name}</span>
-            </button>
-          ))}
+        
+        {/* Client Filters Row - Full Width Scrollable */}
+        <div className="w-full">
+           <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800/50">
+              <button
+                onClick={() => setSelectedClientId('all')}
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border ${
+                  selectedClientId === 'all' 
+                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-900/20' 
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                All Clients
+              </button>
+              
+              {/* Top Clients Section */}
+              {topClients.length > 0 && (
+                <>
+                   <div className="h-6 w-px bg-slate-700/50 mx-1 flex-shrink-0"></div>
+                   {topClients.map(client => (
+                    <button
+                      key={client.id}
+                      onClick={() => setSelectedClientId(client.id)}
+                      className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border flex items-center gap-2 ${
+                        selectedClientId === client.id 
+                          ? 'bg-slate-700 text-white border-indigo-500 ring-1 ring-indigo-500/50 shadow-lg shadow-black/20' 
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-600'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: client.color, color: client.color }}></span>
+                      {client.name}
+                    </button>
+                  ))}
+                </>
+              )}
 
-          {/* Separator if needed */}
-          {topClients.length > 0 && otherClients.length > 0 && (
-             <div className="w-px h-6 bg-slate-700 mx-2 flex-shrink-0"></div>
-          )}
+              {/* Separator between Top and Other */}
+              {topClients.length > 0 && otherClients.length > 0 && (
+                 <div className="h-6 w-px bg-slate-700/50 mx-1 flex-shrink-0"></div>
+              )}
 
-          {/* Other Clients */}
-          {otherClients.map(client => (
-            <button
-              key={client.id}
-              onClick={() => setSelectedClientId(client.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center space-x-2 ${
-                selectedClientId === client.id 
-                  ? 'bg-slate-700 text-white ring-2 ring-indigo-500' 
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: client.color }}></span>
-              <span>{client.name}</span>
-            </button>
-          ))}
+              {/* Other Clients */}
+              {otherClients.map(client => (
+                <button
+                  key={client.id}
+                  onClick={() => setSelectedClientId(client.id)}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border flex items-center gap-2 ${
+                    selectedClientId === client.id 
+                      ? 'bg-slate-700 text-white border-indigo-500 ring-1 ring-indigo-500/50 shadow-lg shadow-black/20' 
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-600'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: client.color }}></span>
+                  {client.name}
+                </button>
+              ))}
+           </div>
         </div>
       </div>
 
@@ -285,6 +294,19 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                       <Clock size={14} /> {formatDuration(displayTotalTime)}
                     </span>
                     {task.description && <span className="truncate max-w-xs">{task.description}</span>}
+                    {/* Render Documentation Link from first subtask if available */}
+                    {taskSubtasks.length > 0 && (() => {
+                      const firstSub = taskSubtasks[0];
+                      const linkMatch = firstSub.title.match(/(https?:\/\/[^\s]+)/);
+                      if (linkMatch) {
+                          return (
+                              <a href={linkMatch[0]} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs">
+                                  Documentation Link
+                              </a>
+                          );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
 
@@ -315,6 +337,26 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                   <div className="space-y-2">
                     {taskSubtasks.map(subtask => {
                       const isSubActive = activeTimer?.subtaskId === subtask.id;
+                      
+                      // Check for links in subtask titles
+                      const linkMatch = subtask.title.match(/(https?:\/\/[^\s]+)/);
+                      let displayTitle: React.ReactNode = subtask.title;
+                      
+                      if (linkMatch) {
+                          const url = linkMatch[0];
+                          const textBefore = subtask.title.substring(0, linkMatch.index);
+                          // Clean up text by removing raw URL if appropriate or just leave it
+                          // For now, let's render the text and a separate link icon/text
+                          displayTitle = (
+                              <span>
+                                  {textBefore} 
+                                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline inline-flex items-center gap-1 ml-1">
+                                      {url.length > 30 ? 'Documentation Link' : url}
+                                  </a>
+                              </span>
+                          );
+                      }
+
                       return (
                         <div key={subtask.id} className="flex items-center justify-between group py-2 border-b border-slate-800/50 last:border-0">
                           <div className="flex items-center gap-3">
@@ -326,7 +368,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                               )}
                             </button>
                             <span className={`${subtask.isCompleted ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
-                              {subtask.title}
+                              {displayTitle}
                             </span>
                           </div>
                           <div className="flex items-center gap-3">
