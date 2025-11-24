@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState } from 'react';
 import { ActiveTimer, Task, Subtask } from '../types';
 import { Square, Clock } from 'lucide-react';
@@ -30,7 +31,7 @@ const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subta
 
   if (!activeTimer) return null;
 
-  const currentTask = tasks.find(t => t.id === activeTimer.taskId);
+  const currentTask = activeTimer.taskId ? tasks.find(t => t.id === activeTimer.taskId) : null;
   const currentSubtask = activeTimer.subtaskId 
     ? subtasks.find(s => s.id === activeTimer.subtaskId) 
     : null;
@@ -71,7 +72,7 @@ const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subta
           </div>
           <div className="flex flex-col">
             <h3 className="text-white font-bold truncate max-w-[200px] md:max-w-md text-sm md:text-base tracking-tight shadow-black drop-shadow-md">
-              {currentTask?.title || 'Unknown Task'}
+              {currentTask?.title || 'Unallocated Task'}
             </h3>
             {currentSubtask && (
               <p className="text-slate-400 text-xs md:text-sm truncate max-w-[150px] flex items-center gap-1.5">

@@ -41,7 +41,7 @@ export interface TimerSession {
 }
 
 export interface ActiveTimer {
-  taskId: string;
+  taskId?: string; // Optional for Quick Start/Gap filling
   subtaskId?: string;
   startTime: number;
 }

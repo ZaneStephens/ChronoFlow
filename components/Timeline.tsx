@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { TimerSession, Task, Client, Subtask, PlannedActivity, RecurringActivity } from '../types';
-import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat, PlusCircle } from 'lucide-react';
 
 interface TimelineProps {
   sessions: TimerSession[];
@@ -13,10 +13,11 @@ interface TimelineProps {
   subtasks: Subtask[];
   onAddPlan: (date: string, time: number) => void;
   onToggleLog: (activityId: string) => void;
-  onStartTimer: (taskId: string, subtaskId?: string) => void;
+  onStartTimer: (taskId?: string, subtaskId?: string, startTimeOverride?: number) => void;
   onDeletePlan: (id: string) => void;
   onEditSession: (session: TimerSession) => void;
   onPreviewTask: (task: Task) => void;
+  onManualEntry: (anchorTime: number, position: 'before' | 'after') => void;
 }
 
 const Timeline: React.FC<TimelineProps> = ({ 
@@ -31,10 +32,12 @@ const Timeline: React.FC<TimelineProps> = ({
   onStartTimer,
   onDeletePlan,
   onEditSession,
-  onPreviewTask
+  onPreviewTask,
+  onManualEntry
 }) => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [currentTimeSydney, setCurrentTimeSydney] = useState('');
+  const [gapMenuSessionId, setGapMenuSessionId] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Constants for Layout
@@ -213,7 +216,9 @@ const Timeline: React.FC<TimelineProps> = ({
   // Combine
   const dayPlans = [...manualPlans, ...ghostPlans];
 
-  const daySessions = sessions.filter(s => s.startTime >= dayStart.getTime() && s.startTime <= dayEnd.getTime());
+  const daySessions = sessions
+    .filter(s => s.startTime >= dayStart.getTime() && s.startTime <= dayEnd.getTime())
+    .sort((a, b) => a.startTime - b.startTime);
 
   // Current Time Line Position (only if today)
   const now = new Date();
@@ -405,7 +410,7 @@ const Timeline: React.FC<TimelineProps> = ({
                 })}
 
                 {/* Render ACTUAL Sessions (Layer 2 - Top) */}
-                {daySessions.map(session => {
+                {daySessions.map((session, index) => {
                     const duration = (session.endTime || Date.now()) - session.startTime;
                     // If active, it grows until 'now'
                     const displayEndTime = session.endTime || Date.now();
@@ -420,42 +425,112 @@ const Timeline: React.FC<TimelineProps> = ({
                     }
 
                     const subtask = session.subtaskId ? subtasks.find(s => s.id === session.subtaskId) : null;
-
                     const isSmall = height < 40;
+
+                    // Gap Detection
+                    const prevSession = index > 0 ? daySessions[index - 1] : null;
+                    const nextSession = index < daySessions.length - 1 ? daySessions[index + 1] : null;
+                    
+                    const GAP_THRESHOLD = 5 * 60 * 1000; // 5 mins
+                    
+                    const hasGapBefore = !prevSession || (session.startTime - (prevSession.endTime || prevSession.startTime) > GAP_THRESHOLD);
+                    const hasGapAfter = !nextSession || (nextSession.startTime - displayEndTime > GAP_THRESHOLD);
 
                     return (
                         <div
                             key={session.id}
-                            onClick={(e) => { e.stopPropagation(); onEditSession(session); }}
-                            className="absolute left-6 right-6 md:left-[52%] md:right-4 rounded-lg shadow-lg border-l-4 z-20 overflow-hidden hover:z-50 transition-all hover:scale-[1.01] cursor-pointer"
+                            className="absolute left-6 right-6 md:left-[52%] md:right-4 group z-20"
                             style={{ 
                                 top, 
                                 height: Math.max(height, 24), // Min height
-                                backgroundColor: '#1e293b', // slate-800
-                                borderColor: client?.color || (session.customTitle ? '#10b981' : '#94a3b8') 
                             }}
-                            title="Click to edit session"
                         >
-                            <div className={`h-full w-full bg-opacity-10 p-2 flex flex-col justify-center ${isSmall ? 'flex-row items-center justify-start gap-2' : ''}`} style={{ backgroundColor: client?.color ? `${client.color}15` : (session.customTitle ? '#10b98115' : undefined) }}>
-                                {!isSmall && (
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-[10px] uppercase font-bold text-slate-400">{client?.name || 'Quick Log'}</span>
-                                        <span className="text-[10px] font-mono text-slate-500">
-                                            {new Date(session.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {session.endTime ? new Date(session.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : 'Now'}
-                                        </span>
-                                    </div>
-                                )}
-                                <h4 className="text-sm font-semibold text-white truncate leading-tight">
-                                    {subtask ? subtask.title : (task?.title || session.customTitle || 'Unknown Task')}
-                                </h4>
-                                {!isSmall && session.notes && (
-                                    <p className="text-xs text-slate-500 truncate mt-1">{session.notes}</p>
-                                )}
-                                {session.isManualLog && (
-                                    <div className="absolute top-1 right-1 text-slate-600">
-                                        <CheckSquare size={12} />
-                                    </div>
-                                )}
+                            {/* Hover Plus Buttons */}
+                            {hasGapBefore && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onManualEntry(session.startTime, 'before'); }}
+                                    className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 w-6 h-6 bg-slate-700 hover:bg-indigo-600 rounded-full text-white shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
+                                    title="Fill gap before (Manual Entry)"
+                                >
+                                    <PlusCircle size={14} />
+                                </button>
+                            )}
+
+                            {hasGapAfter && (
+                                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-30">
+                                   <button
+                                       onClick={(e) => {
+                                          e.stopPropagation();
+                                          setGapMenuSessionId(session.id);
+                                       }}
+                                       className="w-6 h-6 bg-slate-700 hover:bg-emerald-600 rounded-full text-white shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
+                                       title="Fill gap after"
+                                   >
+                                       <PlusCircle size={14} />
+                                   </button>
+                                   
+                                   {/* Confirmation Menu */}
+                                   {gapMenuSessionId === session.id && (
+                                       <>
+                                          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setGapMenuSessionId(null); }}></div>
+                                          <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 w-32 animate-in fade-in zoom-in-95 duration-100">
+                                             <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onStartTimer(undefined, undefined, displayEndTime);
+                                                    setGapMenuSessionId(null);
+                                                }}
+                                                className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-indigo-600 rounded transition-colors text-left"
+                                             >
+                                                <Play size={12} /> Start Timer
+                                             </button>
+                                             <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onManualEntry(displayEndTime, 'after');
+                                                    setGapMenuSessionId(null);
+                                                }}
+                                                className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-emerald-600 rounded transition-colors text-left"
+                                             >
+                                                <CheckSquare size={12} /> Manual Log
+                                             </button>
+                                          </div>
+                                       </>
+                                   )}
+                                </div>
+                            )}
+
+                            {/* Main Card */}
+                            <div 
+                                onClick={(e) => { e.stopPropagation(); onEditSession(session); }}
+                                className="w-full h-full rounded-lg shadow-lg border-l-4 overflow-hidden hover:z-50 transition-all hover:scale-[1.01] cursor-pointer"
+                                style={{ 
+                                    backgroundColor: '#1e293b', // slate-800
+                                    borderColor: client?.color || (session.customTitle ? '#10b981' : '#94a3b8') 
+                                }}
+                                title="Click to edit session"
+                            >
+                                <div className={`h-full w-full bg-opacity-10 p-2 flex flex-col justify-center ${isSmall ? 'flex-row items-center justify-start gap-2' : ''}`} style={{ backgroundColor: client?.color ? `${client.color}15` : (session.customTitle ? '#10b98115' : undefined) }}>
+                                    {!isSmall && (
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400">{client?.name || 'Quick Log'}</span>
+                                            <span className="text-[10px] font-mono text-slate-500">
+                                                {new Date(session.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {session.endTime ? new Date(session.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : 'Now'}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <h4 className="text-sm font-semibold text-white truncate leading-tight">
+                                        {subtask ? subtask.title : (task?.title || session.customTitle || 'Unallocated')}
+                                    </h4>
+                                    {!isSmall && session.notes && (
+                                        <p className="text-xs text-slate-500 truncate mt-1">{session.notes}</p>
+                                    )}
+                                    {session.isManualLog && (
+                                        <div className="absolute top-1 right-1 text-slate-600">
+                                            <CheckSquare size={12} />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     );

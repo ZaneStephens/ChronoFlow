@@ -1,17 +1,19 @@
 
+
 import React, { useState, useEffect } from 'react';
-import { TimerSession, Task, Subtask } from '../types';
-import { X, Save, Clock, Trash2, AlertCircle } from 'lucide-react';
+import { TimerSession, Task, Subtask, Client } from '../types';
+import { X, Save, Clock, Trash2, AlertCircle, CheckSquare, Zap } from 'lucide-react';
 
 interface SessionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (sessionId: string | null, updates: Partial<TimerSession>) => void;
   onDelete?: (sessionId: string) => void;
-  session?: TimerSession | null; // If null, we might be stopping a timer (creating a new session effectively)
-  initialData?: Partial<TimerSession>; // For the "Stop Timer" flow where we have start/end but no ID yet
-  mode: 'edit' | 'stop';
+  session?: TimerSession | null; 
+  initialData?: Partial<TimerSession>; 
+  mode: 'edit' | 'stop' | 'create';
   tasks: Task[];
+  clients?: Client[];
 }
 
 const SessionModal: React.FC<SessionModalProps> = ({ 
@@ -22,20 +24,42 @@ const SessionModal: React.FC<SessionModalProps> = ({
   session, 
   initialData, 
   mode,
-  tasks
+  tasks,
+  clients = []
 }) => {
   const [notes, setNotes] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Allocation State
+  const [isAllocating, setIsAllocating] = useState(false);
+  const [allocType, setAllocType] = useState<'task' | 'quick'>('task');
+  const [selectedTaskId, setSelectedTaskId] = useState('');
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickClientId, setQuickClientId] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setShowDeleteConfirm(false);
+      
+      const activeTaskId = session?.taskId || initialData?.taskId;
+      const activeCustomTitle = session?.customTitle;
+
+      // Check if we need to allocate (Unallocated Task)
+      if (!activeTaskId && !activeCustomTitle && (mode === 'create' || mode === 'stop' || (mode === 'edit' && session))) {
+          setIsAllocating(true);
+          setAllocType('task');
+          setSelectedTaskId('');
+          setQuickTitle('');
+          setQuickClientId('');
+      } else {
+          setIsAllocating(false);
+      }
+
       if (mode === 'stop' && initialData) {
         setNotes('');
-        // We don't edit times during stop flow usually, but we could
-      } else if (mode === 'edit' && session) {
+      } else if ((mode === 'edit' || mode === 'create') && session) {
         setNotes(session.notes || '');
         setStartTime(new Date(session.startTime).toTimeString().slice(0, 5));
         setEndTime(session.endTime ? new Date(session.endTime).toTimeString().slice(0, 5) : '');
@@ -48,7 +72,21 @@ const SessionModal: React.FC<SessionModalProps> = ({
   const handleSave = () => {
     const updates: Partial<TimerSession> = { notes };
     
-    if (mode === 'edit' && session) {
+    if (isAllocating) {
+        if (allocType === 'task') {
+            if (!selectedTaskId) return; // Validation
+            updates.taskId = selectedTaskId;
+            updates.clientId = undefined; // Clear manual client if any
+            updates.customTitle = undefined;
+        } else {
+            if (!quickTitle) return; // Validation
+            updates.customTitle = quickTitle;
+            updates.clientId = quickClientId || undefined;
+            updates.taskId = undefined;
+        }
+    }
+
+    if ((mode === 'edit' || mode === 'create') && session) {
       // Parse times
       const date = new Date(session.startTime);
       const year = date.getFullYear();
@@ -80,28 +118,91 @@ const SessionModal: React.FC<SessionModalProps> = ({
   };
 
   const activeTaskId = session?.taskId || initialData?.taskId;
-  const taskTitle = tasks.find(t => t.id === activeTaskId)?.title || 'Unknown Task';
+  const taskTitle = tasks.find(t => t.id === activeTaskId)?.title || session?.customTitle || 'Unallocated Activity';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             {mode === 'stop' ? <Clock className="text-indigo-400" /> : <Clock className="text-emerald-400" />}
-            {mode === 'stop' ? 'Save Session Notes' : 'Edit Session'}
+            {mode === 'stop' ? 'Save Session Notes' : mode === 'create' ? 'Create New Entry' : 'Edit Session'}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>
         
-        <div className="p-6 space-y-4">
-          <div className="bg-slate-700/30 p-3 rounded-lg border border-slate-700">
-             <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Task</p>
-             <p className="text-white font-medium truncate">{taskTitle}</p>
-          </div>
+        <div className="p-6 space-y-4 overflow-y-auto">
+          {!isAllocating ? (
+            <div className="bg-slate-700/30 p-3 rounded-lg border border-slate-700">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Task</p>
+                <p className="text-white font-medium truncate">{taskTitle}</p>
+            </div>
+          ) : (
+            <div className="space-y-3 p-4 bg-slate-900/30 rounded-xl border border-dashed border-indigo-500/30">
+                <div className="flex justify-between items-center">
+                    <h4 className="text-sm font-bold text-indigo-400 uppercase tracking-wider">Allocate Time</h4>
+                </div>
+                
+                {/* Type Toggle */}
+                <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-700">
+                    <button
+                        onClick={() => setAllocType('task')}
+                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${
+                            allocType === 'task' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                        }`}
+                    >
+                        <CheckSquare size={14} /> Existing Task
+                    </button>
+                    <button
+                        onClick={() => setAllocType('quick')}
+                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${
+                            allocType === 'quick' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                        }`}
+                    >
+                        <Zap size={14} /> Quick Entry
+                    </button>
+                </div>
 
-          {mode === 'edit' && (
+                {allocType === 'task' ? (
+                     <div>
+                        <select
+                            value={selectedTaskId}
+                            onChange={(e) => setSelectedTaskId(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                        >
+                            <option value="">-- Select Task --</option>
+                            {tasks.map(t => (
+                                <option key={t.id} value={t.id}>{t.title}</option>
+                            ))}
+                        </select>
+                     </div>
+                ) : (
+                    <div className="space-y-2">
+                        <input
+                            type="text"
+                            placeholder="Title (e.g. Meeting)"
+                            value={quickTitle}
+                            onChange={(e) => setQuickTitle(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                        <select
+                            value={quickClientId}
+                            onChange={(e) => setQuickClientId(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                        >
+                            <option value="">-- No Client --</option>
+                            {clients.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
+          )}
+
+          {(mode === 'edit' || mode === 'create') && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Start Time</label>
@@ -138,9 +239,9 @@ const SessionModal: React.FC<SessionModalProps> = ({
           </div>
         </div>
 
-        <div className="p-4 bg-slate-900/50 border-t border-slate-700 flex justify-between gap-3">
+        <div className="p-4 bg-slate-900/50 border-t border-slate-700 flex justify-between gap-3 shrink-0">
           <div>
-            {mode === 'edit' && onDelete && (
+            {mode !== 'create' && onDelete && (
               !showDeleteConfirm ? (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
@@ -178,10 +279,11 @@ const SessionModal: React.FC<SessionModalProps> = ({
             </button>
             <button
                 onClick={handleSave}
-                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-lg shadow-indigo-900/20 flex items-center gap-2 transition-transform active:scale-95"
+                disabled={isAllocating && ((allocType === 'task' && !selectedTaskId) || (allocType === 'quick' && !quickTitle))}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-lg shadow-indigo-900/20 flex items-center gap-2 transition-transform active:scale-95"
             >
                 <Save size={18} />
-                {mode === 'stop' ? 'Stop & Save' : 'Update Session'}
+                {mode === 'stop' ? 'Stop & Save' : mode === 'create' ? 'Create Entry' : 'Update Session'}
             </button>
           </div>
         </div>

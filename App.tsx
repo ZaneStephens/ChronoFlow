@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TaskBoard from './components/TaskBoard';
@@ -40,9 +41,9 @@ const App: React.FC = () => {
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'edit' | 'stop' | 'log-plan'>('stop');
+  const [modalMode, setModalMode] = useState<'edit' | 'stop' | 'log-plan' | 'create'>('stop');
   const [editingSession, setEditingSession] = useState<TimerSession | null>(null);
-  const [pendingTimerStart, setPendingTimerStart] = useState<{taskId: string, subtaskId?: string} | null>(null);
+  const [pendingTimerStart, setPendingTimerStart] = useState<{taskId?: string, subtaskId?: string} | null>(null);
   const [timerToStop, setTimerToStop] = useState<ActiveTimer | null>(null);
   const [pendingPlanLogId, setPendingPlanLogId] = useState<string | null>(null);
 
@@ -222,17 +223,21 @@ const App: React.FC = () => {
     ));
   };
 
-  const startTimer = (taskId: string, subtaskId?: string) => {
+  const startTimer = (taskId?: string, subtaskId?: string, startTimeOverride?: number) => {
     // If a timer is running, we need to stop it first
     if (activeTimer) {
+      // Prevent restarting the exact same task if just clicked again
       if (activeTimer.taskId === taskId && activeTimer.subtaskId === subtaskId) return;
       
+      // If we are switching, queue the next start
+      // Note: taskId can be undefined for quick start, which is valid
       setPendingTimerStart({ taskId, subtaskId });
       stopTimerRequest(activeTimer);
     } else {
       const lastSessionEndTime = sessions.reduce((max, s) => Math.max(max, s.endTime || 0), 0);
       const now = Date.now();
-      const startTime = Math.max(now, lastSessionEndTime);
+      // Use override if provided, otherwise max of now/last session
+      const startTime = startTimeOverride || Math.max(now, lastSessionEndTime);
 
       setActiveTimer({
         taskId,
@@ -247,7 +252,7 @@ const App: React.FC = () => {
   };
 
   const stopTimerRequest = (timer: ActiveTimer) => {
-    if (timer.subtaskId) {
+    if (timer.subtaskId && timer.taskId) {
       const sub = subtasks.find(s => s.id === timer.subtaskId);
       finalizeSession(timer, sub?.title || '', Date.now());
     } else {
@@ -260,12 +265,14 @@ const App: React.FC = () => {
 
   const handleStopConfirm = (_id: string | null, updates: Partial<TimerSession>) => {
     if (timerToStop) {
-      finalizeSession(timerToStop, updates.notes || '', Date.now());
+      // Include updates like taskId/clientId/customTitle if the timer was unallocated
+      // The updates object comes from SessionModal onSave
+      finalizeSession(timerToStop, updates.notes || '', Date.now(), updates);
       setTimerToStop(null);
     }
   };
 
-  const finalizeSession = (timer: ActiveTimer, notes: string, rawEndTime: number) => {
+  const finalizeSession = (timer: ActiveTimer, notes: string, rawEndTime: number, extraUpdates?: Partial<TimerSession>) => {
     const rawDuration = rawEndTime - timer.startTime;
     let blocks = Math.ceil(rawDuration / SIX_MINUTES_MS);
     if (blocks < 1) blocks = 1;
@@ -280,23 +287,26 @@ const App: React.FC = () => {
       startTime: timer.startTime,
       endTime: roundedEndTime,
       notes,
-      isManualLog: false
+      isManualLog: false,
+      ...extraUpdates // Merges taskId/clientId/customTitle if allocated during stop
     };
     
     setSessions(prev => [...prev, newSession]);
 
-    if (timer.subtaskId) {
+    // Only update total time if allocated to a task
+    if (newSession.subtaskId) {
       setSubtasks(prev => prev.map(s => 
-        s.id === timer.subtaskId ? { ...s, totalTime: s.totalTime + durationInSeconds } : s
+        s.id === newSession.subtaskId ? { ...s, totalTime: s.totalTime + durationInSeconds } : s
       ));
-    } else {
+    } else if (newSession.taskId) {
       setTasks(prev => prev.map(t => 
-        t.id === timer.taskId ? { ...t, totalTime: t.totalTime + durationInSeconds } : t
+        t.id === newSession.taskId ? { ...t, totalTime: t.totalTime + durationInSeconds } : t
       ));
     }
 
     setActiveTimer(null);
 
+    // Explicitly check for non-null pendingTimerStart to avoid issues with falsy values if taskId is undefined
     if (pendingTimerStart) {
       setActiveTimer({
         taskId: pendingTimerStart.taskId,
@@ -313,36 +323,112 @@ const App: React.FC = () => {
     setModalOpen(true);
   };
 
-  const handleEditConfirm = (sessionId: string | null, updates: Partial<TimerSession>) => {
+  const handleManualEntry = (anchorTime: number, position: 'before' | 'after') => {
+     let startTime, endTime;
+     const DURATION = 30 * 60 * 1000; // 30 minutes default
+
+     if (position === 'before') {
+         // Ends at anchor
+         endTime = anchorTime;
+         startTime = anchorTime - DURATION;
+     } else {
+         // Starts at anchor
+         startTime = anchorTime;
+         endTime = anchorTime + DURATION;
+     }
+
+     const newSession: TimerSession = {
+         id: generateId(), 
+         startTime,
+         endTime,
+         notes: '',
+         isManualLog: true
+     };
+     setEditingSession(newSession);
+     setModalMode('create');
+     setModalOpen(true);
+  };
+
+  const handleSessionSave = (sessionId: string | null, updates: Partial<TimerSession>) => {
     // Handle 'log-plan' mode specially
     if (modalMode === 'log-plan' && pendingPlanLogId) {
         completeLogPlan(pendingPlanLogId, updates.notes || '');
         setPendingPlanLogId(null);
         return;
     }
+    
+    if (modalMode === 'stop') {
+        handleStopConfirm(null, updates);
+        return;
+    }
 
+    // Handle Create New Session (Manual Entry)
+    if (modalMode === 'create') {
+        const newSession: TimerSession = {
+            id: generateId(),
+            startTime: Date.now(), // Fallback
+            endTime: Date.now(), // Fallback
+            isManualLog: true,
+            ...editingSession, // Base defaults
+            ...updates // User inputs
+        };
+        
+        setSessions(prev => [...prev, newSession]);
+        
+        // Update task times if allocated
+        if (newSession.endTime && newSession.startTime) {
+             const duration = (newSession.endTime - newSession.startTime) / 1000;
+             if (newSession.taskId) {
+                  setTasks(prev => prev.map(t => t.id === newSession.taskId ? { ...t, totalTime: t.totalTime + duration } : t));
+             }
+        }
+        return;
+    }
+
+    // Handle Edit Existing
     if (!sessionId) return;
     
     const oldSession = sessions.find(s => s.id === sessionId);
     if (!oldSession) return;
 
     let durationDiff = 0;
-    if (updates.startTime || updates.endTime) {
-       const oldDuration = (oldSession.endTime || Date.now()) - oldSession.startTime;
-       const newStart = updates.startTime !== undefined ? updates.startTime : oldSession.startTime;
-       const newEnd = updates.endTime !== undefined ? updates.endTime : (oldSession.endTime || Date.now());
-       const newDuration = newEnd - newStart;
-       durationDiff = Math.floor((newDuration - oldDuration) / 1000);
-    }
+    // Calculate new duration
+    const newStart = updates.startTime !== undefined ? updates.startTime : oldSession.startTime;
+    const newEnd = updates.endTime !== undefined ? updates.endTime : (oldSession.endTime || Date.now());
+    const newDuration = newEnd - newStart;
+    
+    // Calculate old duration
+    const oldDuration = (oldSession.endTime || Date.now()) - oldSession.startTime;
+    
+    durationDiff = Math.floor((newDuration - oldDuration) / 1000);
 
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, ...updates } : s));
 
-    if (durationDiff !== 0) {
-      if (oldSession.subtaskId) {
-        setSubtasks(prev => prev.map(s => s.id === oldSession.subtaskId ? { ...s, totalTime: s.totalTime + durationDiff } : s));
-      } else if (oldSession.taskId) {
-        setTasks(prev => prev.map(t => t.id === oldSession.taskId ? { ...t, totalTime: t.totalTime + durationDiff } : t));
-      }
+    // Handle time updates
+    // Scenario 1: Task ID didn't change, just duration
+    if ((!updates.taskId || updates.taskId === oldSession.taskId) && oldSession.taskId) {
+        if (durationDiff !== 0) {
+            if (oldSession.subtaskId) {
+                setSubtasks(prev => prev.map(s => s.id === oldSession.subtaskId ? { ...s, totalTime: s.totalTime + durationDiff } : s));
+            } else {
+                setTasks(prev => prev.map(t => t.id === oldSession.taskId ? { ...t, totalTime: t.totalTime + durationDiff } : t));
+            }
+        }
+    } 
+    // Scenario 2: Allocation Changed (e.g. was Quick/None, now Task) or Task Swapped
+    else if (updates.taskId !== undefined && updates.taskId !== oldSession.taskId) {
+         const newSec = Math.floor(newDuration / 1000);
+         const oldSec = Math.floor(oldDuration / 1000);
+
+         // Remove time from old task if it existed
+         if (oldSession.taskId) {
+             setTasks(prev => prev.map(t => t.id === oldSession.taskId ? { ...t, totalTime: Math.max(0, t.totalTime - oldSec) } : t));
+         }
+         
+         // Add time to new task
+         if (updates.taskId) {
+             setTasks(prev => prev.map(t => t.id === updates.taskId ? { ...t, totalTime: t.totalTime + newSec } : t));
+         }
     }
   };
 
@@ -453,14 +539,6 @@ const App: React.FC = () => {
         setPlannedActivities(prev => [...prev, newPlan]);
         
         // Immediately trigger the log flow for this new ID
-        // We need a slight delay or state update to ensure newPlan is in state? 
-        // Actually, we can just "Log" it directly using local variables if we want, 
-        // but to keep consistent, we'll optimistically update plannedActivities then trigger log
-        
-        // Wait for next render cycle? No, let's just manually trigger "completeLogPlan" 
-        // effectively immediately creating the session and marking the (just created) plan as logged.
-        
-        // Let's create the session directly to avoid async state issues
         createSessionFromPlan(newPlan);
         return;
     }
@@ -549,13 +627,7 @@ const App: React.FC = () => {
   };
 
   const handleDeletePlan = (id: string) => {
-    // If it's a ghost plan, we can't delete the instance (it doesn't exist)
-    // We would have to delete the rule, or add an exception. 
-    // For now, if user tries to delete a ghost plan, we just ignore it or could prompt to delete rule.
-    // Given the prompt requirements, let's assume we delete the rule if it's a ghost? 
-    // No, that's dangerous. Let's filter out ghost IDs in Timeline logic or handle here.
     if (id.startsWith('ghost_')) {
-        // Maybe offer to delete the recurrence? For now do nothing or show alert.
         if (confirm("This is a recurring rule. Do you want to delete the entire recurring rule?")) {
             const [_, ruleId] = id.split('_');
             handleDeleteRecurringRule(ruleId);
@@ -639,6 +711,7 @@ const App: React.FC = () => {
                  onDeletePlan={handleDeletePlan}
                  onEditSession={openEditSession}
                  onPreviewTask={setPreviewTask}
+                 onManualEntry={handleManualEntry}
                />
              )}
 
@@ -680,12 +753,13 @@ const App: React.FC = () => {
            setPendingTimerStart(null);
            setPendingPlanLogId(null);
         }}
-        onSave={modalMode === 'stop' || modalMode === 'log-plan' ? (id, updates) => (modalMode === 'log-plan' ? handleEditConfirm(null, updates) : handleStopConfirm(id, updates)) : handleEditConfirm}
+        onSave={handleSessionSave}
         onDelete={handleDeleteSession}
         mode={modalMode === 'log-plan' ? 'stop' : modalMode} 
         session={editingSession}
         initialData={timerToStop ? { taskId: timerToStop.taskId, subtaskId: timerToStop.subtaskId } : undefined}
         tasks={tasks}
+        clients={clients}
       />
 
       <PlanModal 
