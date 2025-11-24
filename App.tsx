@@ -201,6 +201,10 @@ const App: React.FC = () => {
     setTasks([newTask, ...tasks]);
   };
 
+  const updateTaskStatus = (taskId: string, status: Task['status']) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+  };
+
   const addSubtasks = (taskId: string, newSubtasks: { title: string }[]) => {
     const subtaskObjects: Subtask[] = newSubtasks.map(st => ({
       id: generateId(),
@@ -691,6 +695,7 @@ const App: React.FC = () => {
                  onAddTask={addTask}
                  onAddSubtasks={addSubtasks}
                  onDeleteTask={deleteTask}
+                 onUpdateTaskStatus={updateTaskStatus}
                  onToggleSubtask={toggleSubtask}
                  onStartTimer={startTimer}
                  onStopTimer={handleStopClick}

@@ -1,7 +1,8 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { Task, Subtask, Client, ActiveTimer } from '../types';
-import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash } from 'lucide-react';
+import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye } from 'lucide-react';
 import { generateSubtasks } from '../services/geminiService';
 
 interface TaskBoardProps {
@@ -12,6 +13,7 @@ interface TaskBoardProps {
   onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'totalTime' | 'status'>) => void;
   onAddSubtasks: (taskId: string, subtasks: { title: string }[]) => void;
   onDeleteTask: (taskId: string) => void;
+  onUpdateTaskStatus: (taskId: string, status: Task['status']) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onStartTimer: (taskId: string, subtaskId?: string) => void;
   onStopTimer: () => void;
@@ -25,6 +27,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   onAddTask,
   onAddSubtasks,
   onDeleteTask,
+  onUpdateTaskStatus,
   onToggleSubtask,
   onStartTimer,
   onStopTimer,
@@ -33,6 +36,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [isAiLoading, setIsAiLoading] = useState<string | null>(null); // taskId being processed
   const [manualSubtaskInputs, setManualSubtaskInputs] = useState<{[key: string]: string}>({});
+  const [showCompleted, setShowCompleted] = useState(false);
   
   // New Task Form State
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -63,9 +67,15 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
 
   // ---
 
-  const filteredTasks = selectedClientId === 'all' 
-    ? tasks 
-    : tasks.filter(t => t.clientId === selectedClientId);
+  const filteredTasks = tasks.filter(t => {
+      // 1. Client Filter
+      if (selectedClientId !== 'all' && t.clientId !== selectedClientId) return false;
+      
+      // 2. Completion Status Filter
+      if (!showCompleted && t.status === 'done') return false;
+
+      return true;
+  });
 
   const toggleTaskExpand = (taskId: string) => {
     const newSet = new Set(expandedTasks);
@@ -128,9 +138,24 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     <div id="task-board" className="space-y-6 pb-24">
       {/* Header & Filters */}
       <div className="flex flex-col gap-6">
-        <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Tasks and Tickets</h2>
-          <p className="text-slate-400 text-sm mt-1">Manage your workload and track time precisely.</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-3xl font-bold text-white tracking-tight">Tasks and Tickets</h2>
+            <p className="text-slate-400 text-sm mt-1">Manage your workload and track time precisely.</p>
+          </div>
+          
+          <button
+            onClick={() => setShowCompleted(!showCompleted)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+              showCompleted 
+                ? 'bg-slate-700 text-white border-slate-600' 
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+            }`}
+            title={showCompleted ? "Hide Completed Tasks" : "Show Completed Tasks"}
+          >
+            {showCompleted ? <Eye size={16} /> : <EyeOff size={16} />}
+            <span className="hidden md:inline">{showCompleted ? "Hide Completed" : "Show Completed"}</span>
+          </button>
         </div>
         
         {/* Client Filters Row - Full Width Scrollable */}
@@ -250,7 +275,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
       <div className="space-y-4">
         {filteredTasks.length === 0 && (
           <div className="text-center py-12 text-slate-500">
-            <p>No tasks found. Select a client and add your first task.</p>
+            {selectedClientId === 'all' && !showCompleted ? 'No active tasks found. Add a task or check completed items.' : 'No tasks match your filters.'}
           </div>
         )}
         
@@ -259,13 +284,21 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
           const taskSubtasks = subtasks.filter(s => s.taskId === task.id);
           const isExpanded = expandedTasks.has(task.id);
           const isActive = activeTimer?.taskId === task.id && !activeTimer?.subtaskId;
+          const isDone = task.status === 'done';
           
           // Calculate total time including subtasks
           const aggregatedSubtaskTime = taskSubtasks.reduce((acc, curr) => acc + curr.totalTime, 0);
           const displayTotalTime = task.totalTime + aggregatedSubtaskTime;
 
           return (
-            <div key={task.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden transition-all hover:border-slate-600">
+            <div 
+              key={task.id} 
+              className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${
+                 isDone 
+                   ? 'border-emerald-500/30 opacity-75' 
+                   : 'border-slate-700 hover:border-slate-600'
+              }`}
+            >
               <div className="p-4 flex items-center gap-4">
                 <button 
                   onClick={() => toggleTaskExpand(task.id)}
@@ -274,33 +307,35 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                   {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                 </button>
                 
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span 
-                      className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-900"
+                      className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-900 shrink-0"
                       style={{ backgroundColor: client?.color || '#cbd5e1' }}
                     >
                       {client?.name}
                     </span>
                     {task.ticketNumber && (
-                       <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded">
+                       <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded shrink-0">
                          <Hash size={10} /> {task.ticketNumber}
                        </span>
                     )}
-                    <h3 className="text-lg font-semibold text-white ml-1">{task.title}</h3>
+                    <h3 className={`text-lg font-semibold ml-1 truncate ${isDone ? 'text-slate-400 line-through' : 'text-white'}`}>
+                      {task.title}
+                    </h3>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-slate-400">
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1 shrink-0">
                       <Clock size={14} /> {formatDuration(displayTotalTime)}
                     </span>
-                    {task.description && <span className="truncate max-w-xs">{task.description}</span>}
+                    {task.description && <span className="truncate max-w-xs hidden sm:block">{task.description}</span>}
                     {/* Render Documentation Link from first subtask if available */}
                     {taskSubtasks.length > 0 && (() => {
                       const firstSub = taskSubtasks[0];
                       const linkMatch = firstSub.title.match(/(https?:\/\/[^\s]+)/);
                       if (linkMatch) {
                           return (
-                              <a href={linkMatch[0]} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs">
+                              <a href={linkMatch[0]} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs shrink-0">
                                   Documentation Link
                               </a>
                           );
@@ -310,7 +345,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => isActive ? onStopTimer() : onStartTimer(task.id)}
                     className={`p-2 rounded-full transition-all ${
@@ -319,12 +354,29 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                         : 'bg-slate-700 text-slate-300 hover:bg-indigo-600 hover:text-white'
                     }`}
                     title={isActive ? "Stop Timer" : "Start Timer"}
+                    disabled={isDone}
                   >
                     {isActive ? <PauseIcon /> : <Play size={18} fill="currentColor" />}
                   </button>
+
+                  <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
+
+                  <button
+                     onClick={() => onUpdateTaskStatus(task.id, isDone ? 'todo' : 'done')}
+                     className={`p-2 rounded-full transition-colors ${
+                         isDone 
+                           ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' 
+                           : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-700'
+                     }`}
+                     title={isDone ? "Mark as Active" : "Mark as Completed"}
+                  >
+                     <CheckCircle2 size={18} />
+                  </button>
+                  
                   <button
                     onClick={() => onDeleteTask(task.id)}
                     className="p-2 rounded-full hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
+                    title="Delete Task"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -345,8 +397,6 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                       if (linkMatch) {
                           const url = linkMatch[0];
                           const textBefore = subtask.title.substring(0, linkMatch.index);
-                          // Clean up text by removing raw URL if appropriate or just leave it
-                          // For now, let's render the text and a separate link icon/text
                           displayTitle = (
                               <span>
                                   {textBefore} 
@@ -380,6 +430,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                   ? 'text-indigo-400 bg-indigo-500/10' 
                                   : 'text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100'
                               }`}
+                              disabled={isDone}
                             >
                               {isSubActive ? <PauseIcon size={14} /> : <Play size={14} fill="currentColor" />}
                             </button>
@@ -390,38 +441,42 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                   </div>
                   
                   {/* Manual Subtask Add */}
-                  <div className="mt-4 flex gap-2">
-                     <input 
-                       type="text" 
-                       placeholder="Add subtask manually..."
-                       className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                       value={manualSubtaskInputs[task.id] || ''}
-                       onChange={(e) => handleManualSubtaskChange(task.id, e.target.value)}
-                       onKeyDown={(e) => e.key === 'Enter' && handleAddManualSubtask(task.id)}
-                     />
-                     <button 
-                       onClick={() => handleAddManualSubtask(task.id)}
-                       className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-sm transition-colors"
-                     >
-                       Add
-                     </button>
-                  </div>
+                  {!isDone && (
+                    <div className="mt-4 flex gap-2">
+                       <input 
+                         type="text" 
+                         placeholder="Add subtask manually..."
+                         className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                         value={manualSubtaskInputs[task.id] || ''}
+                         onChange={(e) => handleManualSubtaskChange(task.id, e.target.value)}
+                         onKeyDown={(e) => e.key === 'Enter' && handleAddManualSubtask(task.id)}
+                       />
+                       <button 
+                         onClick={() => handleAddManualSubtask(task.id)}
+                         className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-sm transition-colors"
+                       >
+                         Add
+                       </button>
+                    </div>
+                  )}
 
-                  <div className="mt-4 pt-2 flex items-center gap-3 border-t border-slate-800">
-                    <button
-                      id="ai-breakdown-btn"
-                      onClick={() => handleGenerateSubtasks(task)}
-                      disabled={isAiLoading === task.id}
-                      className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 transition-colors"
-                    >
-                      {isAiLoading === task.id ? (
-                        <div className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full" />
-                      ) : (
-                        <Wand2 size={14} />
-                      )}
-                      AI Breakdown (MS Stack)
-                    </button>
-                  </div>
+                  {!isDone && (
+                    <div className="mt-4 pt-2 flex items-center gap-3 border-t border-slate-800">
+                        <button
+                        id="ai-breakdown-btn"
+                        onClick={() => handleGenerateSubtasks(task)}
+                        disabled={isAiLoading === task.id}
+                        className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 transition-colors"
+                        >
+                        {isAiLoading === task.id ? (
+                            <div className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full" />
+                        ) : (
+                            <Wand2 size={14} />
+                        )}
+                        AI Breakdown (MS Stack)
+                        </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
