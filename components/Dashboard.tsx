@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Task, TimerSession, Client, ActiveTimer, Subtask } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Clock, CheckCircle2, TrendingUp, Target, Activity } from 'lucide-react';
@@ -44,6 +44,9 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
   
   const completedTasks = tasks.filter(t => t.status === 'done').length;
   
+  // Exclude internal clients from the "Active Clients" count
+  const activeExternalClientsCount = clients.filter(c => !c.isInternal).length;
+  
   // Calculate Today's Progress
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -65,44 +68,58 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
   const todayProgressPercent = Math.min((totalTodaySeconds / DAILY_GOAL_SECONDS) * 100, 100);
   const remainingSeconds = Math.max(DAILY_GOAL_SECONDS - totalTodaySeconds, 0);
 
-  // Chart Data: Hours per client
-  const chartData = clients.map(client => {
-    const clientTasks = tasks.filter(t => t.clientId === client.id);
-    const taskSeconds = clientTasks.reduce((acc, t) => acc + t.totalTime, 0);
-    
-    // Add quick sessions linked to this client
-    const quickSessions = sessions.filter(s => !s.taskId && s.clientId === client.id && s.endTime);
-    const quickSeconds = quickSessions.reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
+  // Chart Data Logic: Group internal clients
+  const chartData = useMemo(() => {
+    const data: any[] = [];
+    let internalHours = 0;
 
-    // Add active time if relevant to this client
-    let additional = 0;
-    if (activeTimer) {
-      const activeTask = tasks.find(t => t.id === activeTimer.taskId);
-      if (activeTask && activeTask.clientId === client.id) {
-        additional = validActiveDuration;
+    clients.forEach(client => {
+      // Calculate total hours for this client (tasks + quick sessions)
+      const clientTasks = tasks.filter(t => t.clientId === client.id);
+      const taskSeconds = clientTasks.reduce((acc, t) => acc + t.totalTime, 0);
+      
+      const quickSessions = sessions.filter(s => !s.taskId && s.clientId === client.id && s.endTime);
+      const quickSeconds = quickSessions.reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
+
+      // Add active time if relevant to this client
+      let additional = 0;
+      if (activeTimer) {
+         const activeTask = tasks.find(t => t.id === activeTimer.taskId);
+         if (activeTask && activeTask.clientId === client.id) {
+           additional = validActiveDuration;
+         }
       }
+
+      const totalH = parseFloat(((taskSeconds + quickSeconds + additional) / 3600).toFixed(2));
+
+      if (client.isInternal) {
+        internalHours += totalH;
+      } else {
+        if (totalH > 0) {
+            data.push({ name: client.name, hours: totalH, color: client.color });
+        }
+      }
+    });
+
+    if (internalHours > 0) {
+      data.push({ name: 'Internal Work', hours: parseFloat(internalHours.toFixed(2)), color: '#94a3b8' }); // slate-400 color
+    }
+    
+    // Add Unassigned Quick Entries to chart
+    const unassignedQuickSeconds = sessions
+        .filter(s => !s.taskId && !s.clientId && s.endTime)
+        .reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
+
+    if (unassignedQuickSeconds > 0) {
+        data.push({
+            name: 'Unassigned',
+            hours: parseFloat((unassignedQuickSeconds / 3600).toFixed(2)),
+            color: '#10b981' // emerald-500
+        });
     }
 
-    const hours = parseFloat(((taskSeconds + quickSeconds + additional) / 3600).toFixed(2));
-    return {
-      name: client.name,
-      hours: hours,
-      color: client.color
-    };
-  });
-  
-  // Add Unassigned Quick Entries to chart
-  const unassignedQuickSeconds = sessions
-     .filter(s => !s.taskId && !s.clientId && s.endTime)
-     .reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
-
-  if (unassignedQuickSeconds > 0) {
-      chartData.push({
-          name: 'Quick/Admin',
-          hours: parseFloat((unassignedQuickSeconds / 3600).toFixed(2)),
-          color: '#10b981' // emerald-500
-      });
-  }
+    return data;
+  }, [clients, tasks, sessions, activeTimer, validActiveDuration]);
 
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -165,9 +182,10 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
         />
         <StatCard 
           title="Active Clients" 
-          value={clients.length} 
+          value={activeExternalClientsCount} 
           icon={TrendingUp} 
-          color="bg-purple-500 text-purple-400" 
+          color="bg-purple-500 text-purple-400"
+          subtext="External only"
         />
       </div>
 

@@ -36,7 +36,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
   const [isAllocating, setIsAllocating] = useState(false);
   const [allocType, setAllocType] = useState<'task' | 'quick'>('task');
   const [selectedTaskId, setSelectedTaskId] = useState('');
-  const [quickTitle, setQuickTitle] = useState('');
+  // quickTitle is no longer used for input, but we'll generate one on save
   const [quickClientId, setQuickClientId] = useState('');
 
   useEffect(() => {
@@ -51,7 +51,6 @@ const SessionModal: React.FC<SessionModalProps> = ({
           setIsAllocating(true);
           setAllocType('task');
           setSelectedTaskId('');
-          setQuickTitle('');
           setQuickClientId('');
       } else {
           setIsAllocating(false);
@@ -79,8 +78,18 @@ const SessionModal: React.FC<SessionModalProps> = ({
             updates.clientId = undefined; // Clear manual client if any
             updates.customTitle = undefined;
         } else {
-            if (!quickTitle) return; // Validation
-            updates.customTitle = quickTitle;
+            // Auto-generate title for Quick Entry
+            const client = clients.find(c => c.id === quickClientId);
+            let generatedTitle = 'Quick Entry';
+            
+            if (notes && notes.trim().length > 0) {
+                 // Use first 30 chars of notes
+                 generatedTitle = notes.substring(0, 30) + (notes.length > 30 ? '...' : '');
+            } else if (client) {
+                 generatedTitle = `${client.name} Log`;
+            }
+
+            updates.customTitle = generatedTitle;
             updates.clientId = quickClientId || undefined;
             updates.taskId = undefined;
         }
@@ -180,23 +189,19 @@ const SessionModal: React.FC<SessionModalProps> = ({
                      </div>
                 ) : (
                     <div className="space-y-2">
-                        <input
-                            type="text"
-                            placeholder="Title (e.g. Meeting)"
-                            value={quickTitle}
-                            onChange={(e) => setQuickTitle(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                        />
                         <select
                             value={quickClientId}
                             onChange={(e) => setQuickClientId(e.target.value)}
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                         >
-                            <option value="">-- No Client --</option>
+                            <option value="">-- No Client (Personal/Admin) --</option>
                             {clients.map(c => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
+                        <p className="text-[10px] text-slate-500 italic px-1">
+                           Title will be auto-generated from your notes below.
+                        </p>
                     </div>
                 )}
             </div>
@@ -279,7 +284,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
             </button>
             <button
                 onClick={handleSave}
-                disabled={isAllocating && ((allocType === 'task' && !selectedTaskId) || (allocType === 'quick' && !quickTitle))}
+                disabled={isAllocating && (allocType === 'task' && !selectedTaskId)}
                 className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-lg shadow-indigo-900/20 flex items-center gap-2 transition-transform active:scale-95"
             >
                 <Save size={18} />

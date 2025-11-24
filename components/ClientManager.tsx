@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Client } from '../types';
-import { Plus, Trash2, Briefcase, Mail, User, FileText, ChevronDown, ChevronUp, Edit2, X, Save } from 'lucide-react';
+import { Plus, Trash2, Briefcase, Mail, User, FileText, ChevronDown, ChevronUp, Edit2, X, Save, ShieldCheck } from 'lucide-react';
 
 interface ClientManagerProps {
   clients: Client[];
@@ -15,6 +15,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
 
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
+  const [isInternal, setIsInternal] = useState(false);
   
   // Optional Fields
   const [contactName, setContactName] = useState('');
@@ -30,6 +31,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
     setEditingId(client.id);
     setName(client.name);
     setColor(client.color);
+    setIsInternal(client.isInternal || false);
     setContactName(client.contactName || '');
     setContactEmail(client.contactEmail || '');
     setServices(client.services || '');
@@ -47,6 +49,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
   const resetForm = () => {
     setName('');
     setColor('#6366f1');
+    setIsInternal(false);
     setContactName('');
     setContactEmail('');
     setServices('');
@@ -62,6 +65,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
             id: editingId,
             name,
             color,
+            isInternal,
             contactName,
             contactEmail,
             services
@@ -70,6 +74,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
         onAddClient({
             name,
             color,
+            isInternal,
             contactName,
             contactEmail,
             services
@@ -130,27 +135,40 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
                     className="h-10 w-full bg-slate-900 border border-slate-700 rounded-lg cursor-pointer"
                   />
                </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Contact Name</label>
-                  <input
-                    type="text"
-                    value={contactName}
-                    onChange={(e) => setContactName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
-                    placeholder="Optional"
-                  />
+               <div className="flex items-end">
+                   <label className="flex items-center gap-2 cursor-pointer bg-slate-900 border border-slate-700 rounded-lg px-4 h-10 w-full hover:bg-slate-800 transition-colors">
+                       <input 
+                         type="checkbox" 
+                         checked={isInternal} 
+                         onChange={(e) => setIsInternal(e.target.checked)}
+                         className="w-4 h-4 rounded border-slate-500 text-indigo-600 focus:ring-indigo-500 bg-slate-700"
+                       />
+                       <span className="text-sm text-slate-300 select-none">Internal Work</span>
+                   </label>
                </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Contact Email</label>
-              <input
-                type="email"
-                value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
-                placeholder="Optional"
-              />
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Contact Name</label>
+                    <input
+                        type="text"
+                        value={contactName}
+                        onChange={(e) => setContactName(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
+                        placeholder="Optional"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Contact Email</label>
+                    <input
+                        type="email"
+                        value={contactEmail}
+                        onChange={(e) => setContactEmail(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
+                        placeholder="Optional"
+                    />
+                </div>
             </div>
 
             <div>
@@ -202,7 +220,14 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
                       {client.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h4 className="text-white font-semibold">{client.name}</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-white font-semibold">{client.name}</h4>
+                        {client.isInternal && (
+                            <span className="text-[10px] font-bold bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600 flex items-center gap-1">
+                                <ShieldCheck size={10} /> INTERNAL
+                            </span>
+                        )}
+                      </div>
                       <p className="text-slate-500 text-xs mt-1 flex items-center gap-2">
                         <span>ID: {client.id.substring(0,6)}</span>
                         {(client.contactName || client.services) && (

@@ -7,6 +7,7 @@ export interface Client {
   contactName?: string;
   contactEmail?: string;
   services?: string;
+  isInternal?: boolean; // New: Marks client as internal work (excluded from active counts, grouped in charts)
 }
 
 export interface Subtask {
