@@ -1,3 +1,4 @@
+
 export interface Client {
   id: string;
   name: string;
@@ -54,6 +55,32 @@ export interface PlannedActivity {
   clientId?: string; // New: If type is quick (optional)
   quickTitle?: string; // If type is quick
   isLogged: boolean; // If true, a corresponding session exists
+  recurringId?: string; // Link to a RecurringActivity rule if generated from one
+}
+
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'monthly-nth';
+
+export interface RecurringActivity {
+  id: string;
+  type: 'task' | 'quick';
+  taskId?: string;
+  clientId?: string;
+  quickTitle?: string;
+  
+  startTimeStr: string; // "HH:mm"
+  durationMinutes: number;
+  
+  frequency: RecurrenceFrequency;
+  
+  // Weekly
+  weekDays?: number[]; // 0 (Sun) - 6 (Sat)
+  
+  // Monthly
+  monthDay?: number; // 1-31
+  
+  // Monthly Nth
+  nthWeek?: number; // 1, 2, 3, 4, 5 (last)
+  nthWeekDay?: number; // 0 (Sun) - 6 (Sat)
 }
 
 // For drag and drop or simple list rendering

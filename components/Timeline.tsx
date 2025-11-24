@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { TimerSession, Task, Client, Subtask, PlannedActivity } from '../types';
-import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2 } from 'lucide-react';
+import { TimerSession, Task, Client, Subtask, PlannedActivity, RecurringActivity } from '../types';
+import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat } from 'lucide-react';
 
 interface TimelineProps {
   sessions: TimerSession[];
   plannedActivities: PlannedActivity[];
+  recurringActivities: RecurringActivity[];
   tasks: Task[];
   clients: Client[];
   subtasks: Subtask[];
@@ -19,6 +21,7 @@ interface TimelineProps {
 const Timeline: React.FC<TimelineProps> = ({ 
   sessions, 
   plannedActivities,
+  recurringActivities,
   tasks, 
   clients, 
   subtasks,
@@ -122,14 +125,67 @@ const Timeline: React.FC<TimelineProps> = ({
     onAddPlan(dateKey, clickedDate.getTime());
   };
 
-  // Filter items for the selected day
+  // --- Filter items for the selected day ---
   const dayStart = new Date(selectedDate);
   dayStart.setHours(0,0,0,0);
   const dayEnd = new Date(selectedDate);
   dayEnd.setHours(23,59,59,999);
 
+  // 1. Manual Plans
+  const manualPlans = plannedActivities.filter(p => p.date === dateKey);
+  
+  // 2. Generate Ghost Plans from Recurring Rules
+  const ghostPlans: PlannedActivity[] = recurringActivities.map(rule => {
+      // Check if rule applies to selectedDate
+      let matches = false;
+      const dayOfWeek = selectedDate.getDay(); // 0-6
+      const dayOfMonth = selectedDate.getDate(); // 1-31
+
+      if (rule.frequency === 'daily') matches = true;
+      if (rule.frequency === 'weekly' && rule.weekDays?.includes(dayOfWeek)) matches = true;
+      if (rule.frequency === 'monthly' && rule.monthDay === dayOfMonth) matches = true;
+      if (rule.frequency === 'monthly-nth') {
+          if (rule.nthWeekDay === dayOfWeek) {
+               const nth = Math.floor((dayOfMonth - 1) / 7) + 1;
+               if (rule.nthWeek === nth) matches = true;
+               // Handle 'Last' (5) special case? For now explicit 5
+               if (rule.nthWeek === 5) {
+                   // Check if adding 7 days changes the month
+                   const nextWeek = new Date(selectedDate);
+                   nextWeek.setDate(dayOfMonth + 7);
+                   if (nextWeek.getMonth() !== selectedDate.getMonth()) matches = true;
+               }
+          }
+      }
+
+      if (!matches) return null;
+
+      // Check if this rule is ALREADY instantiated in manualPlans
+      if (manualPlans.some(p => p.recurringId === rule.id)) return null;
+
+      // Create Ghost Plan
+      const [h, m] = rule.startTimeStr.split(':').map(Number);
+      const ghostStart = new Date(selectedDate);
+      ghostStart.setHours(h, m, 0, 0);
+
+      return {
+          id: `ghost_${rule.id}_${dateKey}`, // Special ID format
+          date: dateKey,
+          startTime: ghostStart.getTime(),
+          durationMinutes: rule.durationMinutes,
+          type: rule.type,
+          taskId: rule.taskId,
+          clientId: rule.clientId,
+          quickTitle: rule.quickTitle,
+          isLogged: false,
+          recurringId: rule.id
+      };
+  }).filter(Boolean) as PlannedActivity[];
+
+  // Combine
+  const dayPlans = [...manualPlans, ...ghostPlans];
+
   const daySessions = sessions.filter(s => s.startTime >= dayStart.getTime() && s.startTime <= dayEnd.getTime());
-  const dayPlans = plannedActivities.filter(p => p.date === dateKey);
 
   // Current Time Line Position (only if today)
   const now = new Date();
@@ -147,7 +203,6 @@ const Timeline: React.FC<TimelineProps> = ({
 
        const sub = s.subtaskId ? subtasks.find(st => st.id === s.subtaskId) : null;
        
-       // Format time as short 24h format (e.g. 15:50)
        const formatTime24 = (ts: number) => {
          const date = new Date(ts);
          const h = date.getHours();
@@ -155,7 +210,6 @@ const Timeline: React.FC<TimelineProps> = ({
          return `${h}:${m}`;
        };
 
-       // Columns: Ticket # | Client | Date | Start | End | Description
        return [
          task?.ticketNumber || '', 
          client?.name || 'Quick Entry',
@@ -260,19 +314,23 @@ const Timeline: React.FC<TimelineProps> = ({
                         client = clients.find(c => c.id === plan.clientId) || null;
                     }
 
+                    const isGhost = plan.id.startsWith('ghost_');
+
                     return (
                         <div
                             key={plan.id}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (plan.type === 'task' && task) {
+                              if (plan.type === 'task' && task && !isGhost) {
                                 onPreviewTask(task);
                               }
                             }}
-                            className={`absolute left-2 right-2 md:right-1/2 rounded-lg border-2 border-dashed p-2 transition-all group z-10 flex flex-col overflow-hidden hover:z-50 hover:bg-slate-800 cursor-pointer ${
+                            className={`absolute left-2 right-2 md:right-1/2 rounded-lg border-2 p-2 transition-all group z-10 flex flex-col overflow-hidden hover:z-50 hover:bg-slate-800 cursor-pointer ${
                                 plan.isLogged 
-                                ? 'border-emerald-500/30 bg-emerald-500/5 opacity-60' 
-                                : 'border-slate-600 bg-slate-800/40 hover:border-indigo-400'
+                                ? 'border-dashed border-emerald-500/30 bg-emerald-500/5 opacity-60' 
+                                : isGhost
+                                    ? 'border-dashed border-indigo-500/50 bg-indigo-500/10 hover:border-indigo-400'
+                                    : 'border-dashed border-slate-600 bg-slate-800/40 hover:border-indigo-400'
                             }`}
                             style={{ top, height: Math.max(height, 40) }} // Min height for visibility
                         >
@@ -285,6 +343,11 @@ const Timeline: React.FC<TimelineProps> = ({
                                             <span className="text-[10px] bg-slate-700 text-slate-300 px-1 rounded uppercase font-bold" style={{ color: client?.color }}>{client?.name}</span>
                                         )}
                                         <span className="text-xs text-slate-400 font-mono">{new Date(plan.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                        {isGhost && (
+                                            <span className="text-indigo-400" title="Recurring Activity">
+                                                <Repeat size={12} />
+                                            </span>
+                                        )}
                                      </div>
                                      <h4 className={`text-sm font-medium mt-0.5 truncate ${plan.isLogged ? 'line-through text-slate-500' : 'text-slate-200'}`}>
                                          {plan.type === 'task' ? task?.title : plan.quickTitle}
@@ -303,6 +366,7 @@ const Timeline: React.FC<TimelineProps> = ({
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); onDeletePlan(plan.id); }}
                                         className="p-1 text-slate-400 hover:text-red-400"
+                                        title={isGhost ? "Delete Recurring Rule" : "Delete Plan"}
                                     >
                                         <Trash2 size={16} />
                                     </button>

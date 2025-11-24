@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TaskBoard from './components/TaskBoard';
@@ -13,7 +14,7 @@ import FocusMode from './components/FocusMode';
 import ReportGenerator from './components/ReportGenerator';
 import LandingPage from './components/LandingPage';
 import TutorialOverlay, { TutorialStep } from './components/TutorialOverlay';
-import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActivity } from './types';
+import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActivity, RecurringActivity } from './types';
 
 // Simple ID generator since we can't import uuid
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -34,6 +35,7 @@ const App: React.FC = () => {
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [sessions, setSessions] = useState<TimerSession[]>([]);
   const [plannedActivities, setPlannedActivities] = useState<PlannedActivity[]>([]);
+  const [recurringActivities, setRecurringActivities] = useState<RecurringActivity[]>([]);
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
 
   // Modal State
@@ -80,6 +82,8 @@ const App: React.FC = () => {
     if (storedSubtasks) setSubtasks(JSON.parse(storedSubtasks));
     const storedPlans = localStorage.getItem('plannedActivities');
     if (storedPlans) setPlannedActivities(JSON.parse(storedPlans));
+    const storedRecurring = localStorage.getItem('recurringActivities');
+    if (storedRecurring) setRecurringActivities(JSON.parse(storedRecurring));
     const storedClients = localStorage.getItem('clients');
     if (storedClients) setClients(JSON.parse(storedClients));
   }, []);
@@ -94,8 +98,9 @@ const App: React.FC = () => {
     localStorage.setItem('tasks', JSON.stringify(tasks));
     localStorage.setItem('subtasks', JSON.stringify(subtasks));
     localStorage.setItem('plannedActivities', JSON.stringify(plannedActivities));
+    localStorage.setItem('recurringActivities', JSON.stringify(recurringActivities));
     localStorage.setItem('clients', JSON.stringify(clients));
-  }, [sessions, tasks, subtasks, plannedActivities, clients]);
+  }, [sessions, tasks, subtasks, plannedActivities, recurringActivities, clients]);
 
   // --- Tutorial Steps Definition ---
   const tutorialSteps: TutorialStep[] = [
@@ -164,6 +169,7 @@ const App: React.FC = () => {
     setSubtasks([]);
     setSessions([]);
     setPlannedActivities([]);
+    setRecurringActivities([]);
     
     // Reset view
     setView(ViewMode.DASHBOARD);
@@ -379,29 +385,82 @@ const App: React.FC = () => {
     setPlanModalOpen(true);
   };
 
-  const handleSavePlan = (data: { type: 'task' | 'quick', taskId?: string, clientId?: string, quickTitle?: string, duration: number, startTime: number }) => {
-    const d = new Date(data.startTime);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const dateKey = `${year}-${month}-${day}`;
+  const handleSavePlan = (data: any) => {
+    if (data.isRecurring && data.recurringRule) {
+        // Saving a recurring rule
+        const newRule: RecurringActivity = {
+            id: generateId(),
+            ...data.recurringRule
+        };
+        setRecurringActivities(prev => [...prev, newRule]);
+    } else {
+        // Saving a single planned activity
+        const d = new Date(data.startTime);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
 
-    const newPlan: PlannedActivity = {
-      id: generateId(),
-      date: dateKey,
-      startTime: data.startTime,
-      durationMinutes: data.duration,
-      type: data.type,
-      taskId: data.taskId,
-      clientId: data.clientId,
-      quickTitle: data.quickTitle,
-      isLogged: false
-    };
+        const newPlan: PlannedActivity = {
+          id: generateId(),
+          date: dateKey,
+          startTime: data.startTime,
+          durationMinutes: data.duration,
+          type: data.type,
+          taskId: data.taskId,
+          clientId: data.clientId,
+          quickTitle: data.quickTitle,
+          isLogged: false
+        };
+        setPlannedActivities(prev => [...prev, newPlan]);
+    }
+  };
 
-    setPlannedActivities(prev => [...prev, newPlan]);
+  const handleDeleteRecurringRule = (ruleId: string) => {
+      setRecurringActivities(prev => prev.filter(r => r.id !== ruleId));
   };
 
   const handleTogglePlanLog = (planId: string) => {
+    // Check if this is a "Ghost" ID from the Timeline (recurring item not yet instantiated)
+    if (planId.startsWith('ghost_')) {
+        // Format: ghost_RULEID_DATEKEY
+        const [_, ruleId, dateKey] = planId.split('_');
+        const rule = recurringActivities.find(r => r.id === ruleId);
+        if (!rule) return;
+
+        // Instantiate this ghost as a real planned activity first
+        const [year, month, day] = dateKey.split('-').map(Number);
+        const [h, m] = rule.startTimeStr.split(':').map(Number);
+        const startTime = new Date(year, month - 1, day, h, m).getTime();
+
+        const newPlan: PlannedActivity = {
+            id: generateId(),
+            date: dateKey,
+            startTime,
+            durationMinutes: rule.durationMinutes,
+            type: rule.type,
+            taskId: rule.taskId,
+            clientId: rule.clientId,
+            quickTitle: rule.quickTitle,
+            isLogged: false,
+            recurringId: rule.id
+        };
+
+        setPlannedActivities(prev => [...prev, newPlan]);
+        
+        // Immediately trigger the log flow for this new ID
+        // We need a slight delay or state update to ensure newPlan is in state? 
+        // Actually, we can just "Log" it directly using local variables if we want, 
+        // but to keep consistent, we'll optimistically update plannedActivities then trigger log
+        
+        // Wait for next render cycle? No, let's just manually trigger "completeLogPlan" 
+        // effectively immediately creating the session and marking the (just created) plan as logged.
+        
+        // Let's create the session directly to avoid async state issues
+        createSessionFromPlan(newPlan);
+        return;
+    }
+
     const plan = plannedActivities.find(p => p.id === planId);
     if (!plan) return;
 
@@ -418,6 +477,39 @@ const App: React.FC = () => {
         completeLogPlan(planId, plan.quickTitle || 'Quick Entry');
       }
     }
+  };
+
+  const createSessionFromPlan = (plan: PlannedActivity) => {
+     // Mark plan as logged
+     setPlannedActivities(prev => prev.map(p => p.id === plan.id ? { ...p, isLogged: true } : p));
+     
+     if (plan.type === 'task') {
+        // For tasks, we still want to show the modal to enter notes
+        setPendingPlanLogId(plan.id);
+        setModalMode('log-plan');
+        setEditingSession(null);
+        setTimerToStop({ taskId: plan.taskId!, startTime: plan.startTime });
+        setModalOpen(true);
+     } else {
+        // Quick entry, just log it
+        const durationMs = plan.durationMinutes * 60 * 1000;
+        let blocks = Math.ceil(durationMs / SIX_MINUTES_MS);
+        if (blocks < 1) blocks = 1;
+        const roundedDuration = blocks * SIX_MINUTES_MS;
+        const endTime = plan.startTime + roundedDuration;
+
+        const newSession: TimerSession = {
+           id: generateId(),
+           taskId: plan.taskId, 
+           clientId: plan.clientId,
+           customTitle: plan.quickTitle, 
+           startTime: plan.startTime,
+           endTime: endTime,
+           notes: plan.quickTitle || 'Recurring Entry',
+           isManualLog: true
+        };
+        setSessions(prev => [...prev, newSession]);
+     }
   };
 
   const completeLogPlan = (planId: string, notes: string) => {
@@ -453,6 +545,19 @@ const App: React.FC = () => {
   };
 
   const handleDeletePlan = (id: string) => {
+    // If it's a ghost plan, we can't delete the instance (it doesn't exist)
+    // We would have to delete the rule, or add an exception. 
+    // For now, if user tries to delete a ghost plan, we just ignore it or could prompt to delete rule.
+    // Given the prompt requirements, let's assume we delete the rule if it's a ghost? 
+    // No, that's dangerous. Let's filter out ghost IDs in Timeline logic or handle here.
+    if (id.startsWith('ghost_')) {
+        // Maybe offer to delete the recurrence? For now do nothing or show alert.
+        if (confirm("This is a recurring rule. Do you want to delete the entire recurring rule?")) {
+            const [_, ruleId] = id.split('_');
+            handleDeleteRecurringRule(ruleId);
+        }
+        return;
+    }
     setPlannedActivities(prev => prev.filter(p => p.id !== id));
   };
 
@@ -520,6 +625,7 @@ const App: React.FC = () => {
                <Timeline 
                  sessions={sessions}
                  plannedActivities={plannedActivities}
+                 recurringActivities={recurringActivities}
                  tasks={tasks}
                  clients={clients}
                  subtasks={subtasks}
@@ -581,8 +687,10 @@ const App: React.FC = () => {
         isOpen={planModalOpen}
         onClose={() => setPlanModalOpen(false)}
         onSave={handleSavePlan}
+        onDeleteRule={handleDeleteRecurringRule}
         tasks={tasks}
         clients={clients}
+        recurringActivities={recurringActivities}
         initialTime={planInitData?.time}
       />
 
