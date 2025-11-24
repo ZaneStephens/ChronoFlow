@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TaskBoard from './components/TaskBoard';
@@ -49,7 +47,7 @@ const App: React.FC = () => {
 
   // Plan Modal State
   const [planModalOpen, setPlanModalOpen] = useState(false);
-  const [planInitData, setPlanInitData] = useState<{date: string, time: number} | null>(null);
+  const [planInitData, setPlanInitData] = useState<{date: string, time: number, duration?: number} | null>(null);
 
   // Task Preview Modal State
   const [previewTask, setPreviewTask] = useState<Task | null>(null);
@@ -327,20 +325,7 @@ const App: React.FC = () => {
     setModalOpen(true);
   };
 
-  const handleManualEntry = (anchorTime: number, position: 'before' | 'after') => {
-     let startTime, endTime;
-     const DURATION = 30 * 60 * 1000; // 30 minutes default
-
-     if (position === 'before') {
-         // Ends at anchor
-         endTime = anchorTime;
-         startTime = anchorTime - DURATION;
-     } else {
-         // Starts at anchor
-         startTime = anchorTime;
-         endTime = anchorTime + DURATION;
-     }
-
+  const handleManualEntry = (startTime: number, endTime: number) => {
      const newSession: TimerSession = {
          id: generateId(), 
          startTime,
@@ -474,8 +459,8 @@ const App: React.FC = () => {
   };
 
   // --- Planning Logic ---
-  const handleAddPlan = (date: string, time: number) => {
-    setPlanInitData({ date, time });
+  const handleAddPlan = (date: string, time: number, initialDuration: number = 30) => {
+    setPlanInitData({ date, time, duration: initialDuration });
     setPlanModalOpen(true);
   };
 
@@ -776,6 +761,7 @@ const App: React.FC = () => {
         clients={clients}
         recurringActivities={recurringActivities}
         initialTime={planInitData?.time}
+        initialDuration={planInitData?.duration}
       />
 
       <TaskPreviewModal 

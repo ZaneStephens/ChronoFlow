@@ -1,8 +1,6 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { TimerSession, Task, Client, Subtask, PlannedActivity, RecurringActivity } from '../types';
-import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat, PlusCircle } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat, PlusCircle, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface TimelineProps {
   sessions: TimerSession[];
@@ -11,13 +9,13 @@ interface TimelineProps {
   tasks: Task[];
   clients: Client[];
   subtasks: Subtask[];
-  onAddPlan: (date: string, time: number) => void;
+  onAddPlan: (date: string, time: number, initialDuration?: number) => void;
   onToggleLog: (activityId: string) => void;
   onStartTimer: (taskId?: string, subtaskId?: string, startTimeOverride?: number) => void;
   onDeletePlan: (id: string) => void;
   onEditSession: (session: TimerSession) => void;
   onPreviewTask: (task: Task) => void;
-  onManualEntry: (anchorTime: number, position: 'before' | 'after') => void;
+  onManualEntry: (startTime: number, endTime: number) => void;
 }
 
 const Timeline: React.FC<TimelineProps> = ({ 
@@ -38,13 +36,13 @@ const Timeline: React.FC<TimelineProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [currentTimeSydney, setCurrentTimeSydney] = useState('');
   const [gapMenuSessionId, setGapMenuSessionId] = useState<string | null>(null);
+  const [pixelsPerHour, setPixelsPerHour] = useState(120);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Constants for Layout
   const START_HOUR = 6;
   const END_HOUR = 18; // 6 PM
-  const PIXELS_PER_HOUR = 120; // Height of one hour block
-  const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * PIXELS_PER_HOUR;
+  const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * pixelsPerHour;
 
   // Update Sydney Time Clock
   useEffect(() => {
@@ -66,12 +64,12 @@ const Timeline: React.FC<TimelineProps> = ({
     if (scrollContainerRef.current) {
         const now = new Date();
         const hours = now.getHours() + now.getMinutes() / 60;
-        const scrollPos = (hours - START_HOUR) * PIXELS_PER_HOUR - 100;
+        const scrollPos = (hours - START_HOUR) * pixelsPerHour - 100;
         scrollContainerRef.current.scrollTop = Math.max(0, scrollPos);
     }
     
     return () => clearInterval(timer);
-  }, []);
+  }, []); // Only on mount
 
   // Navigation
   const handlePrevDay = () => {
@@ -84,6 +82,9 @@ const Timeline: React.FC<TimelineProps> = ({
     d.setDate(d.getDate() + 1);
     setSelectedDate(d);
   };
+
+  const handleZoomIn = () => setPixelsPerHour(prev => Math.min(prev + 20, 240));
+  const handleZoomOut = () => setPixelsPerHour(prev => Math.max(prev - 20, 60));
   
   // FIX: Use Local Time for Date Key to prevent timezone drift
   const formatDateKey = (date: Date) => {
@@ -94,40 +95,6 @@ const Timeline: React.FC<TimelineProps> = ({
   };
   
   const dateKey = formatDateKey(selectedDate);
-
-  // Helper: Get vertical position and height for a time range
-  const getPosition = (startTime: number, endTime: number) => {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    
-    const startHours = start.getHours() + start.getMinutes() / 60;
-    const endHours = end.getHours() + end.getMinutes() / 60;
-
-    const top = (startHours - START_HOUR) * PIXELS_PER_HOUR;
-    const height = (endHours - startHours) * PIXELS_PER_HOUR;
-
-    return { top, height };
-  };
-
-  // Helper: Handle clicking the background to plan
-  const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!scrollContainerRef.current) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickY = e.clientY - rect.top; // Relative to the container content
-    
-    // Calculate time from Y
-    const hoursFromStart = clickY / PIXELS_PER_HOUR;
-    const absoluteHours = START_HOUR + hoursFromStart;
-    
-    const clickedDate = new Date(selectedDate);
-    clickedDate.setHours(Math.floor(absoluteHours));
-    clickedDate.setMinutes(Math.floor((absoluteHours % 1) * 60));
-    clickedDate.setSeconds(0);
-    clickedDate.setMilliseconds(0);
-
-    onAddPlan(dateKey, clickedDate.getTime());
-  };
 
   // --- Filter items for the selected day ---
   const dayStart = new Date(selectedDate);
@@ -158,12 +125,9 @@ const Timeline: React.FC<TimelineProps> = ({
           const start = new Date(rule.startDate);
           // Only if selectedDate is ON or AFTER start date
           if (dayStart.getTime() >= new Date(start.setHours(0,0,0,0)).getTime()) {
-             // Calculate difference in days
              const oneDay = 24 * 60 * 60 * 1000;
-             // Use timezone agnostic comparison via Date objects at midnight
-             const d1 = new Date(dateKey); // Local YYYY-MM-DD to date
+             const d1 = new Date(dateKey); 
              const d2 = new Date(rule.startDate);
-             // Must handle local time offsets, simple diff of timestamps at midnight
              const diffDays = Math.round((d1.getTime() - d2.getTime()) / oneDay);
              
              if (diffDays >= 0 && diffDays % 14 === 0) {
@@ -213,18 +177,100 @@ const Timeline: React.FC<TimelineProps> = ({
       };
   }).filter(Boolean) as PlannedActivity[];
 
-  // Combine
+  // Combine plans
   const dayPlans = [...manualPlans, ...ghostPlans];
 
+  // Sessions
   const daySessions = sessions
     .filter(s => s.startTime >= dayStart.getTime() && s.startTime <= dayEnd.getTime())
     .sort((a, b) => a.startTime - b.startTime);
+
+  // --- Helpers for Position & Collision ---
+
+  const getPosition = (startTime: number, endTime: number) => {
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    
+    const startHours = start.getHours() + start.getMinutes() / 60;
+    const endHours = end.getHours() + end.getMinutes() / 60;
+
+    const top = (startHours - START_HOUR) * pixelsPerHour;
+    const height = (endHours - startHours) * pixelsPerHour;
+
+    return { top, height };
+  };
+
+  // Safe Time Calculation (Smart Shrinking)
+  const getBusyRanges = () => {
+      return [
+          ...daySessions.map(s => ({ start: s.startTime, end: s.endTime || Date.now() })),
+          ...dayPlans.map(p => ({ start: p.startTime, end: p.startTime + p.durationMinutes * 60 * 1000 }))
+      ].sort((a, b) => a.start - b.start);
+  };
+
+  const calculateSafeDuration = (startTime: number, maxDesiredMinutes: number = 30): number => {
+      const busyRanges = getBusyRanges();
+      
+      // Find nearest next start time
+      const nextBusy = busyRanges.find(r => r.start > startTime + 1000); // +1s buffer
+      
+      const dayEndTime = new Date(selectedDate);
+      dayEndTime.setHours(END_HOUR, 0, 0, 0);
+      
+      const limitTime = nextBusy ? nextBusy.start : dayEndTime.getTime();
+      const availableMs = limitTime - startTime;
+      
+      const availableMinutes = Math.floor(availableMs / 60000);
+      
+      // Min 5 mins, Max desired
+      return Math.max(5, Math.min(maxDesiredMinutes, availableMinutes));
+  };
+
+  const calculateSafeStartBefore = (endTime: number, maxDesiredMinutes: number = 30): { start: number, duration: number } => {
+      const busyRanges = getBusyRanges().sort((a,b) => a.end - b.end);
+      
+      // Find last busy range ending before or at endTime
+      const prevBusy = busyRanges.filter(r => r.end <= endTime - 1000).pop(); // -1s buffer
+      
+      const dayStartTime = new Date(selectedDate);
+      dayStartTime.setHours(START_HOUR, 0, 0, 0);
+      
+      const limitTime = prevBusy ? prevBusy.end : dayStartTime.getTime();
+      const availableMs = endTime - limitTime;
+      const availableMinutes = Math.floor(availableMs / 60000);
+      
+      const duration = Math.max(5, Math.min(maxDesiredMinutes, availableMinutes));
+      const start = endTime - (duration * 60 * 1000);
+      
+      return { start, duration };
+  };
+
+  // Helper: Handle clicking the background to plan
+  const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!scrollContainerRef.current) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickY = e.clientY - rect.top; // Relative to the container content
+    
+    // Calculate time from Y
+    const hoursFromStart = clickY / pixelsPerHour;
+    const absoluteHours = START_HOUR + hoursFromStart;
+    
+    const clickedDate = new Date(selectedDate);
+    clickedDate.setHours(Math.floor(absoluteHours));
+    clickedDate.setMinutes(Math.floor((absoluteHours % 1) * 60));
+    clickedDate.setSeconds(0);
+    clickedDate.setMilliseconds(0);
+
+    const safeDuration = calculateSafeDuration(clickedDate.getTime(), 30);
+    onAddPlan(dateKey, clickedDate.getTime(), safeDuration);
+  };
 
   // Current Time Line Position (only if today)
   const now = new Date();
   const isToday = formatDateKey(now) === dateKey;
   const currentHours = now.getHours() + now.getMinutes() / 60;
-  const currentTimeTop = (currentHours - START_HOUR) * PIXELS_PER_HOUR;
+  const currentTimeTop = (currentHours - START_HOUR) * pixelsPerHour;
 
   const handleExportCSV = () => {
     const rows = daySessions.filter(s => s.endTime).map(s => {
@@ -283,6 +329,12 @@ const Timeline: React.FC<TimelineProps> = ({
         </div>
 
         <div className="flex items-center gap-6 mt-4 md:mt-0">
+          <div className="flex items-center bg-slate-900 rounded-lg border border-slate-700 p-1">
+              <button onClick={handleZoomOut} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded" title="Zoom Out"><ZoomOut size={16} /></button>
+              <div className="px-2 text-xs text-slate-500 font-mono select-none">Zoom</div>
+              <button onClick={handleZoomIn} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded" title="Zoom In"><ZoomIn size={16} /></button>
+          </div>
+          <div className="h-8 w-px bg-slate-700 hidden md:block"></div>
           <div className="text-right hidden md:block">
             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Sydney Time</p>
             <p className="text-lg font-mono font-bold text-slate-200">{currentTimeSydney}</p>
@@ -307,8 +359,8 @@ const Timeline: React.FC<TimelineProps> = ({
                 {Array.from({ length: END_HOUR - START_HOUR + 1 }).map((_, i) => {
                     const hour = START_HOUR + i;
                     return (
-                        <div key={hour} className="flex items-center h-[120px] border-b border-slate-800/50 box-border absolute w-full" style={{ top: i * PIXELS_PER_HOUR, height: PIXELS_PER_HOUR }}>
-                            <div className="w-16 text-right pr-4 text-xs font-mono text-slate-500 -mt-[100px]">
+                        <div key={hour} className="flex items-center border-b border-slate-800/50 box-border absolute w-full" style={{ top: i * pixelsPerHour, height: pixelsPerHour }}>
+                            <div className="w-16 text-right pr-4 text-xs font-mono text-slate-500" style={{ marginTop: `-${pixelsPerHour - 16}px` }}>
                                 {hour > 12 ? `${hour - 12} PM` : hour === 12 ? '12 PM' : `${hour} AM`}
                             </div>
                             <div className="flex-1 border-t border-slate-800/30"></div>
@@ -448,7 +500,11 @@ const Timeline: React.FC<TimelineProps> = ({
                             {/* Hover Plus Buttons */}
                             {hasGapBefore && (
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); onManualEntry(session.startTime, 'before'); }}
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      const { start, duration } = calculateSafeStartBefore(session.startTime, 30);
+                                      onManualEntry(start, start + duration * 60 * 1000); 
+                                    }}
                                     className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 w-6 h-6 bg-slate-700 hover:bg-indigo-600 rounded-full text-white shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
                                     title="Fill gap before (Manual Entry)"
                                 >
@@ -487,7 +543,8 @@ const Timeline: React.FC<TimelineProps> = ({
                                              <button 
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onManualEntry(displayEndTime, 'after');
+                                                    const safeDuration = calculateSafeDuration(displayEndTime, 30);
+                                                    onManualEntry(displayEndTime, displayEndTime + safeDuration * 60 * 1000);
                                                     setGapMenuSessionId(null);
                                                 }}
                                                 className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-emerald-600 rounded transition-colors text-left"

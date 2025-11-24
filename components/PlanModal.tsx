@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Task, Client, RecurringActivity, RecurrenceFrequency } from '../types';
 import { X, CalendarPlus, Zap, CheckSquare, Repeat, Trash2, CalendarDays } from 'lucide-react';
@@ -13,9 +11,10 @@ interface PlanModalProps {
   clients: Client[];
   recurringActivities?: RecurringActivity[];
   initialTime?: number;
+  initialDuration?: number;
 }
 
-const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDeleteRule, tasks, clients, recurringActivities = [], initialTime }) => {
+const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDeleteRule, tasks, clients, recurringActivities = [], initialTime, initialDuration }) => {
   const [tab, setTab] = useState<'one-off' | 'recurring'>('one-off');
   
   // Shared
@@ -62,7 +61,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
       // Don't reset selectedTaskId here immediately, let the filter effect handle it to avoid race
       setQuickTitle('');
       setQuickClientId('');
-      setDuration(30);
+      setDuration(initialDuration || 30);
       setFilterClient('all');
       setFrequency('daily');
       setWeekDays([1, 2, 3, 4, 5]); // Mon-Fri default
@@ -83,7 +82,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
         setTimeStr(`${h}:${m}`);
       }
     }
-  }, [isOpen, initialTime]);
+  }, [isOpen, initialTime, initialDuration]);
 
   const filteredTasks = filterClient === 'all' 
     ? tasks 
