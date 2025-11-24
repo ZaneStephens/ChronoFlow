@@ -48,6 +48,7 @@ const App: React.FC = () => {
   // Plan Modal State
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [planInitData, setPlanInitData] = useState<{date: string, time: number, duration?: number} | null>(null);
+  const [editingPlan, setEditingPlan] = useState<PlannedActivity | null>(null);
 
   // Task Preview Modal State
   const [previewTask, setPreviewTask] = useState<Task | null>(null);
@@ -469,11 +470,54 @@ const App: React.FC = () => {
   // --- Planning Logic ---
   const handleAddPlan = (date: string, time: number, initialDuration: number = 30) => {
     setPlanInitData({ date, time, duration: initialDuration });
+    setEditingPlan(null);
     setPlanModalOpen(true);
   };
 
+  const handleEditPlan = (plan: PlannedActivity) => {
+      setEditingPlan(plan);
+      setPlanModalOpen(true);
+  };
+
   const handleSavePlan = (data: any) => {
-    if (data.isRecurring && data.recurringRule) {
+    if (editingPlan) {
+        // We are updating an existing or ghost plan
+        const d = new Date(data.startTime);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+
+        if (editingPlan.id.startsWith('ghost_')) {
+             // Materialize ghost with updates
+             const newPlan: PlannedActivity = {
+                id: generateId(),
+                date: dateKey,
+                startTime: data.startTime,
+                durationMinutes: data.duration,
+                type: data.type,
+                taskId: data.taskId,
+                clientId: data.clientId,
+                quickTitle: data.quickTitle,
+                isLogged: false,
+                recurringId: editingPlan.recurringId
+             };
+             setPlannedActivities(prev => [...prev, newPlan]);
+        } else {
+             // Update existing plan
+             setPlannedActivities(prev => prev.map(p => p.id === editingPlan.id ? {
+                ...p,
+                date: dateKey,
+                startTime: data.startTime,
+                durationMinutes: data.duration,
+                type: data.type,
+                taskId: data.taskId,
+                clientId: data.clientId,
+                quickTitle: data.quickTitle,
+             } : p));
+        }
+        setEditingPlan(null);
+    } else if (data.isRecurring && data.recurringRule) {
         // Saving a recurring rule
         const newRule: RecurringActivity = {
             id: generateId(),
@@ -505,6 +549,30 @@ const App: React.FC = () => {
 
   const handleDeleteRecurringRule = (ruleId: string) => {
       setRecurringActivities(prev => prev.filter(r => r.id !== ruleId));
+  };
+
+  const handleUpdatePlan = (planId: string, newStartTime: number) => {
+    if (planId.startsWith('ghost_')) {
+        const [_, ruleId, dateKey] = planId.split('_');
+        const rule = recurringActivities.find(r => r.id === ruleId);
+        if (!rule) return;
+
+        const newPlan: PlannedActivity = {
+            id: generateId(),
+            date: dateKey,
+            startTime: newStartTime,
+            durationMinutes: rule.durationMinutes,
+            type: rule.type,
+            taskId: rule.taskId,
+            clientId: rule.clientId,
+            quickTitle: rule.quickTitle,
+            isLogged: false,
+            recurringId: rule.id
+        };
+        setPlannedActivities(prev => [...prev, newPlan]);
+    } else {
+        setPlannedActivities(prev => prev.map(p => p.id === planId ? { ...p, startTime: newStartTime } : p));
+    }
   };
 
   const handleTogglePlanLog = (planId: string) => {
@@ -712,6 +780,8 @@ const App: React.FC = () => {
                  onEditSession={openEditSession}
                  onPreviewTask={setPreviewTask}
                  onManualEntry={handleManualEntry}
+                 onUpdatePlan={handleUpdatePlan}
+                 onEditPlan={handleEditPlan}
                />
              )}
 
@@ -764,7 +834,7 @@ const App: React.FC = () => {
 
       <PlanModal 
         isOpen={planModalOpen}
-        onClose={() => setPlanModalOpen(false)}
+        onClose={() => { setPlanModalOpen(false); setEditingPlan(null); }}
         onSave={handleSavePlan}
         onDeleteRule={handleDeleteRecurringRule}
         tasks={tasks}
@@ -772,6 +842,7 @@ const App: React.FC = () => {
         recurringActivities={recurringActivities}
         initialTime={planInitData?.time}
         initialDuration={planInitData?.duration}
+        editingPlan={editingPlan}
       />
 
       <TaskPreviewModal 

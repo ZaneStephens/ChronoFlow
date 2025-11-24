@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TimerSession, Task, Client, Subtask, PlannedActivity, RecurringActivity } from '../types';
-import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat, PlusCircle, ZoomIn, ZoomOut } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, Play, CheckSquare, Square, MoreVertical, Zap, Calendar, Trash2, Repeat, PlusCircle, ZoomIn, ZoomOut, Pencil } from 'lucide-react';
 
 interface TimelineProps {
   sessions: TimerSession[];
@@ -16,6 +16,8 @@ interface TimelineProps {
   onEditSession: (session: TimerSession) => void;
   onPreviewTask: (task: Task) => void;
   onManualEntry: (startTime: number, endTime: number) => void;
+  onUpdatePlan: (planId: string, newStartTime: number) => void;
+  onEditPlan: (plan: PlannedActivity) => void;
 }
 
 const Timeline: React.FC<TimelineProps> = ({ 
@@ -31,13 +33,19 @@ const Timeline: React.FC<TimelineProps> = ({
   onDeletePlan,
   onEditSession,
   onPreviewTask,
-  onManualEntry
+  onManualEntry,
+  onUpdatePlan,
+  onEditPlan
 }) => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [currentTimeSydney, setCurrentTimeSydney] = useState('');
   const [gapMenuSessionId, setGapMenuSessionId] = useState<string | null>(null);
   const [pixelsPerHour, setPixelsPerHour] = useState(120);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Drag State
+  const [dragState, setDragState] = useState<{ id: string, startY: number, startTime: number } | null>(null);
+  const [optimisticStartTime, setOptimisticStartTime] = useState<number | null>(null);
 
   // Constants for Layout
   const START_HOUR = 6;
@@ -198,6 +206,69 @@ const Timeline: React.FC<TimelineProps> = ({
     const height = (endHours - startHours) * pixelsPerHour;
 
     return { top, height };
+  };
+
+  // Drag Handlers
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+        if (!dragState) return;
+
+        const deltaY = e.clientY - dragState.startY;
+        const deltaMinutes = (deltaY / pixelsPerHour) * 60;
+        const deltaMs = deltaMinutes * 60 * 1000;
+        
+        let newStartTime = dragState.startTime + deltaMs;
+
+        // Snap to 15 mins
+        const snapMs = 15 * 60 * 1000;
+        newStartTime = Math.round(newStartTime / snapMs) * snapMs;
+
+        // Boundary Check (6 AM to 6 PM)
+        const dayStartBoundary = new Date(selectedDate);
+        dayStartBoundary.setHours(START_HOUR, 0, 0, 0);
+        
+        const dayEndBoundary = new Date(selectedDate);
+        dayEndBoundary.setHours(END_HOUR, 0, 0, 0);
+
+        if (newStartTime < dayStartBoundary.getTime()) newStartTime = dayStartBoundary.getTime();
+        // Check if item goes past end
+        // We need duration from somewhere, let's grab it from the plan list if needed, or pass it in state
+        // For simplicity, just check start time isn't past end hour
+        if (newStartTime > dayEndBoundary.getTime()) newStartTime = dayEndBoundary.getTime();
+
+        setOptimisticStartTime(newStartTime);
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+        if (!dragState) return;
+        
+        if (optimisticStartTime !== null && optimisticStartTime !== dragState.startTime) {
+            onUpdatePlan(dragState.id, optimisticStartTime);
+        }
+
+        setDragState(null);
+        setOptimisticStartTime(null);
+    };
+
+    if (dragState) {
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragState, optimisticStartTime, pixelsPerHour, selectedDate, onUpdatePlan]);
+
+  const handlePlanMouseDown = (e: React.MouseEvent, plan: PlannedActivity) => {
+      if (plan.isLogged) return; // Prevent dragging logged items
+      e.stopPropagation(); // Prevent background click logic
+      setDragState({
+          id: plan.id,
+          startY: e.clientY,
+          startTime: plan.startTime
+      });
   };
 
   // Safe Time Calculation (Smart Shrinking)
@@ -388,8 +459,10 @@ const Timeline: React.FC<TimelineProps> = ({
 
                 {/* Render PLANNED Activities first (Layer 1) */}
                 {dayPlans.map(plan => {
-                    const endTime = plan.startTime + (plan.durationMinutes * 60 * 1000);
-                    const { top, height } = getPosition(plan.startTime, endTime);
+                    const isDragging = dragState?.id === plan.id;
+                    const startTime = isDragging && optimisticStartTime ? optimisticStartTime : plan.startTime;
+                    const endTime = startTime + (plan.durationMinutes * 60 * 1000);
+                    const { top, height } = getPosition(startTime, endTime);
                     
                     if (top < 0 || top > TOTAL_HEIGHT) return null;
 
@@ -404,22 +477,25 @@ const Timeline: React.FC<TimelineProps> = ({
                     return (
                         <div
                             key={plan.id}
+                            onMouseDown={(e) => handlePlanMouseDown(e, plan)}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (plan.type === 'task' && task && !isGhost) {
                                 onPreviewTask(task);
                               }
                             }}
-                            className={`absolute left-2 right-2 md:right-1/2 rounded-lg border-2 p-2 transition-all group z-10 flex flex-col overflow-hidden hover:z-50 hover:bg-slate-800 cursor-pointer ${
+                            className={`absolute left-2 right-2 md:right-1/2 rounded-lg border-2 p-2 transition-all group z-10 flex flex-col overflow-hidden hover:z-50 hover:bg-slate-800 ${
                                 plan.isLogged 
-                                ? 'border-dashed border-emerald-500/30 bg-emerald-500/5 opacity-60' 
-                                : isGhost
-                                    ? 'border-dashed border-indigo-500/50 bg-indigo-500/10 hover:border-indigo-400'
-                                    : 'border-dashed border-slate-600 bg-slate-800/40 hover:border-indigo-400'
+                                ? 'border-dashed border-emerald-500/30 bg-emerald-500/5 opacity-60 cursor-default' 
+                                : isDragging 
+                                    ? 'border-solid border-indigo-400 bg-slate-800 shadow-xl z-50 scale-[1.02] cursor-move'
+                                    : isGhost
+                                        ? 'border-dashed border-indigo-500/50 bg-indigo-500/10 hover:border-indigo-400 cursor-move'
+                                        : 'border-dashed border-slate-600 bg-slate-800/40 hover:border-indigo-400 cursor-move'
                             }`}
                             style={{ top, height: Math.max(height, 40) }} // Min height for visibility
                         >
-                             <div className="flex justify-between items-start">
+                             <div className="flex justify-between items-start pointer-events-none">
                                  <div className="min-w-0">
                                      <div className="flex items-center gap-2">
                                         {plan.type === 'quick' && !client ? (
@@ -427,7 +503,7 @@ const Timeline: React.FC<TimelineProps> = ({
                                         ) : (
                                             <span className="text-[10px] bg-slate-700 text-slate-300 px-1 rounded uppercase font-bold" style={{ color: client?.color }}>{client?.name}</span>
                                         )}
-                                        <span className="text-xs text-slate-400 font-mono">{new Date(plan.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                        <span className="text-xs text-slate-400 font-mono">{new Date(startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                         {isGhost && (
                                             <span className="text-indigo-400" title="Recurring Activity">
                                                 <Repeat size={12} />
@@ -439,7 +515,17 @@ const Timeline: React.FC<TimelineProps> = ({
                                      </h4>
                                  </div>
                                  
-                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/80 rounded p-1">
+                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/80 rounded p-1 pointer-events-auto">
+                                    {!plan.isLogged && (
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); onEditPlan(plan); }}
+                                            className="p-1 text-slate-400 hover:text-white"
+                                            title="Edit Plan"
+                                        >
+                                            <Pencil size={16} />
+                                        </button>
+                                    )}
+
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); onToggleLog(plan.id); }}
                                         className={`p-1 rounded ${plan.isLogged ? 'text-emerald-400' : 'text-slate-400 hover:text-white'}`}

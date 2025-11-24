@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Task, Client, RecurringActivity, RecurrenceFrequency } from '../types';
-import { X, CalendarPlus, Zap, CheckSquare, Repeat, Trash2, CalendarDays } from 'lucide-react';
+import { Task, Client, RecurringActivity, RecurrenceFrequency, PlannedActivity } from '../types';
+import { X, CalendarPlus, Zap, CheckSquare, Repeat, Trash2, CalendarDays, Edit2 } from 'lucide-react';
 
 interface PlanModalProps {
   isOpen: boolean;
@@ -12,9 +12,10 @@ interface PlanModalProps {
   recurringActivities?: RecurringActivity[];
   initialTime?: number;
   initialDuration?: number;
+  editingPlan?: PlannedActivity | null;
 }
 
-const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDeleteRule, tasks, clients, recurringActivities = [], initialTime, initialDuration }) => {
+const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDeleteRule, tasks, clients, recurringActivities = [], initialTime, initialDuration, editingPlan }) => {
   const [tab, setTab] = useState<'one-off' | 'recurring'>('one-off');
   
   // Shared
@@ -56,41 +57,61 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
 
   useEffect(() => {
     if (isOpen) {
-      setTab('one-off');
-      setType('task');
-      // Don't reset selectedTaskId here immediately, let the filter effect handle it to avoid race
-      setQuickTitle('');
-      setQuickClientId('');
-      setDuration(initialDuration || 30);
-      setFilterClient('all');
-      setFrequency('daily');
-      setWeekDays([1, 2, 3, 4, 5]); // Mon-Fri default
-      setMonthDay(1);
-      setNthWeek(1);
-      setNthWeekDay(1); // Mon
-      
-      if (initialTime) {
-        // Create HH:mm string for input
-        const d = new Date(initialTime);
-        const h = d.getHours().toString().padStart(2, '0');
-        const m = d.getMinutes().toString().padStart(2, '0');
-        setTimeStr(`${h}:${m}`);
+      if (editingPlan) {
+          // EDIT MODE
+          setTab('one-off'); // Editing an instance is treated as one-off modification
+          setType(editingPlan.type);
+          
+          if (editingPlan.type === 'task') {
+              setSelectedTaskId(editingPlan.taskId || '');
+          } else {
+              setQuickTitle(editingPlan.quickTitle || '');
+              setQuickClientId(editingPlan.clientId || '');
+          }
+          
+          setDuration(editingPlan.durationMinutes);
+          
+          const d = new Date(editingPlan.startTime);
+          const h = d.getHours().toString().padStart(2, '0');
+          const m = d.getMinutes().toString().padStart(2, '0');
+          setTimeStr(`${h}:${m}`);
+
       } else {
-        const now = new Date();
-        const h = now.getHours().toString().padStart(2, '0');
-        const m = now.getMinutes().toString().padStart(2, '0');
-        setTimeStr(`${h}:${m}`);
+          // CREATE MODE
+          setTab('one-off');
+          setType('task');
+          setQuickTitle('');
+          setQuickClientId('');
+          setDuration(initialDuration || 30);
+          setFilterClient('all');
+          setFrequency('daily');
+          setWeekDays([1, 2, 3, 4, 5]); // Mon-Fri default
+          setMonthDay(1);
+          setNthWeek(1);
+          setNthWeekDay(1); // Mon
+          
+          if (initialTime) {
+            const d = new Date(initialTime);
+            const h = d.getHours().toString().padStart(2, '0');
+            const m = d.getMinutes().toString().padStart(2, '0');
+            setTimeStr(`${h}:${m}`);
+          } else {
+            const now = new Date();
+            const h = now.getHours().toString().padStart(2, '0');
+            const m = now.getMinutes().toString().padStart(2, '0');
+            setTimeStr(`${h}:${m}`);
+          }
       }
     }
-  }, [isOpen, initialTime, initialDuration]);
+  }, [isOpen, initialTime, initialDuration, editingPlan]);
 
   const filteredTasks = filterClient === 'all' 
     ? tasks 
     : tasks.filter(t => t.clientId === filterClient);
 
-  // Auto-select the first task
+  // Auto-select the first task if not editing
   useEffect(() => {
-    if (type === 'task' && isOpen) {
+    if (type === 'task' && isOpen && !editingPlan) {
       const isValid = filteredTasks.some(t => t.id === selectedTaskId);
       if (!selectedTaskId || !isValid) {
         if (filteredTasks.length > 0) {
@@ -100,7 +121,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
         }
       }
     }
-  }, [filteredTasks, type, isOpen, selectedTaskId]);
+  }, [filteredTasks, type, isOpen, selectedTaskId, editingPlan]);
 
   if (!isOpen) return null;
 
@@ -111,7 +132,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
 
     if (tab === 'one-off') {
         const [h, m] = timeStr.split(':').map(Number);
-        const baseDate = initialTime ? new Date(initialTime) : new Date();
+        const baseDate = editingPlan ? new Date(editingPlan.startTime) : (initialTime ? new Date(initialTime) : new Date());
         baseDate.setHours(h, m, 0, 0);
 
         onSave({
@@ -216,8 +237,8 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
             <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center shrink-0">
             <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <CalendarPlus className="text-indigo-400" size={20} />
-                Plan Activity
+                {editingPlan ? <Edit2 className="text-indigo-400" size={20} /> : <CalendarPlus className="text-indigo-400" size={20} />}
+                {editingPlan ? 'Edit Planned Activity' : 'Plan Activity'}
                 </h3>
             </div>
             <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
@@ -226,27 +247,29 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
             </div>
 
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
-            {/* Tabs */}
-            <div className="flex border-b border-slate-700 mb-6">
-                <button
-                    onClick={() => setTab('one-off')}
-                    className={`pb-3 px-4 text-sm font-medium transition-colors relative ${
-                        tab === 'one-off' ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                >
-                    One-Off Activity
-                    {tab === 'one-off' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>}
-                </button>
-                <button
-                    onClick={() => setTab('recurring')}
-                    className={`pb-3 px-4 text-sm font-medium transition-colors relative ${
-                        tab === 'recurring' ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                >
-                    Recurring Rule
-                    {tab === 'recurring' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>}
-                </button>
-            </div>
+            {/* Tabs - Hide if Editing an Instance */}
+            {!editingPlan && (
+                <div className="flex border-b border-slate-700 mb-6">
+                    <button
+                        onClick={() => setTab('one-off')}
+                        className={`pb-3 px-4 text-sm font-medium transition-colors relative ${
+                            tab === 'one-off' ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                    >
+                        One-Off Activity
+                        {tab === 'one-off' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>}
+                    </button>
+                    <button
+                        onClick={() => setTab('recurring')}
+                        className={`pb-3 px-4 text-sm font-medium transition-colors relative ${
+                            tab === 'recurring' ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                    >
+                        Recurring Rule
+                        {tab === 'recurring' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>}
+                    </button>
+                </div>
+            )}
 
             {/* Common: Task vs Quick */}
             <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-700">
@@ -296,7 +319,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
             </div>
 
             {/* Recurring Logic Configuration */}
-            {tab === 'recurring' && (
+            {tab === 'recurring' && !editingPlan && (
                 <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 space-y-4">
                     <h4 className="text-sm font-bold text-white flex items-center gap-2">
                         <Repeat size={16} className="text-indigo-400" />
@@ -496,8 +519,8 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                 type === 'task' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-900/20' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20'
                 }`}
             >
-                <CalendarPlus size={18} />
-                {tab === 'recurring' ? 'Create Rule' : 'Add Plan'}
+                {editingPlan ? <Edit2 size={18} /> : <CalendarPlus size={18} />}
+                {editingPlan ? 'Update Plan' : (tab === 'recurring' ? 'Create Rule' : 'Add Plan')}
             </button>
             </div>
         </div>
