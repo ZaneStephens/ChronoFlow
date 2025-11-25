@@ -12,9 +12,10 @@ import SearchModal from './components/SearchModal';
 import FocusMode from './components/FocusMode';
 import ReportGenerator from './components/ReportGenerator';
 import ProjectManager from './components/ProjectManager';
+import RockManager from './components/RockManager';
 import LandingPage from './components/LandingPage';
 import TutorialOverlay, { TutorialStep } from './components/TutorialOverlay';
-import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActivity, RecurringActivity, Project, ProjectTemplate } from './types';
+import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActivity, RecurringActivity, Project, ProjectTemplate, Rock } from './types';
 
 // Simple ID generator since we can't import uuid
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -30,6 +31,7 @@ const App: React.FC = () => {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [customTemplates, setCustomTemplates] = useState<ProjectTemplate[]>([]);
+  const [rocks, setRocks] = useState<Rock[]>([]);
 
   const [tasks, setTasks] = useState<Task[]>([
     { id: 't1', clientId: '1', title: 'Server Migration', description: 'Migrate legacy Ubuntu server to AWS', status: 'in-progress', totalTime: 3600, createdAt: Date.now() },
@@ -97,6 +99,8 @@ const App: React.FC = () => {
     if (storedProjects) setProjects(JSON.parse(storedProjects));
     const storedTemplates = localStorage.getItem('customTemplates');
     if (storedTemplates) setCustomTemplates(JSON.parse(storedTemplates));
+    const storedRocks = localStorage.getItem('rocks');
+    if (storedRocks) setRocks(JSON.parse(storedRocks));
   }, []);
 
   useEffect(() => {
@@ -113,7 +117,8 @@ const App: React.FC = () => {
     localStorage.setItem('clients', JSON.stringify(clients));
     localStorage.setItem('projects', JSON.stringify(projects));
     localStorage.setItem('customTemplates', JSON.stringify(customTemplates));
-  }, [sessions, tasks, subtasks, plannedActivities, recurringActivities, clients, projects, customTemplates]);
+    localStorage.setItem('rocks', JSON.stringify(rocks));
+  }, [sessions, tasks, subtasks, plannedActivities, recurringActivities, clients, projects, customTemplates, rocks]);
 
   // --- Tutorial Steps Definition ---
   const tutorialSteps: TutorialStep[] = [
@@ -122,6 +127,24 @@ const App: React.FC = () => {
         title: 'Command Center',
         description: 'Your Dashboard gives you an instant overview of your 7.6h daily goal, recent activity, and client breakdown.',
         view: ViewMode.DASHBOARD
+    },
+    {
+        targetId: 'nav-timeline',
+        title: 'Visual Timeline',
+        description: 'A 6am-6pm continuous view of your day. Click anywhere on the grid to plan future work or log ad-hoc tasks.',
+        view: ViewMode.TIMELINE
+    },
+    {
+        targetId: 'task-board',
+        title: 'Task Execution',
+        description: 'Create tasks and link them to clients. Use the AI Magic Wand to automatically break down complex tickets into actionable subtasks.',
+        view: ViewMode.TASKS
+    },
+    {
+        targetId: 'nav-rocks',
+        title: 'Quarterly Rocks',
+        description: 'Set and track your major 90-day goals. Use AI to refine vague ideas into SMART Rocks with clear Key Results.',
+        view: ViewMode.ROCKS
     },
     {
         targetId: 'nav-projects',
@@ -134,18 +157,6 @@ const App: React.FC = () => {
         title: 'Client Management',
         description: 'Define your clients here. Assign colors, contact details, and service agreements to keep your portfolio organized.',
         view: ViewMode.CLIENTS
-    },
-    {
-        targetId: 'task-board',
-        title: 'Task Execution',
-        description: 'Create tasks and link them to clients. Use the AI Magic Wand to automatically break down complex tickets into actionable subtasks.',
-        view: ViewMode.TASKS
-    },
-    {
-        targetId: 'nav-timeline',
-        title: 'Visual Timeline',
-        description: 'A 6am-6pm continuous view of your day. Click anywhere on the grid to plan future work or log ad-hoc tasks.',
-        view: ViewMode.TIMELINE
     },
     {
         targetId: 'nav-reports',
@@ -191,6 +202,7 @@ const App: React.FC = () => {
     setRecurringActivities([]);
     setProjects([]);
     setCustomTemplates([]);
+    setRocks([]);
     
     // Reset view
     setView(ViewMode.DASHBOARD);
@@ -232,6 +244,19 @@ const App: React.FC = () => {
      setModalMode('create');
      setEditingSession(null);
      setModalOpen(true);
+  };
+
+  // Rock Actions
+  const addRock = (rock: Rock) => {
+    setRocks(prev => [...prev, rock]);
+  };
+
+  const updateRock = (updatedRock: Rock) => {
+    setRocks(prev => prev.map(r => r.id === updatedRock.id ? updatedRock : r));
+  };
+
+  const deleteRock = (id: string) => {
+    setRocks(prev => prev.filter(r => r.id !== id));
   };
 
   const addTask = (taskData: Omit<Task, 'id' | 'createdAt' | 'totalTime' | 'status'>) => {
@@ -774,6 +799,15 @@ const App: React.FC = () => {
                  onDeleteProject={deleteProject}
                  onSaveTemplate={saveTemplate}
                  onLogTime={handleLogProjectTime}
+               />
+             )}
+
+             {view === ViewMode.ROCKS && (
+               <RockManager
+                 rocks={rocks}
+                 onAddRock={addRock}
+                 onUpdateRock={updateRock}
+                 onDeleteRock={deleteRock}
                />
              )}
 

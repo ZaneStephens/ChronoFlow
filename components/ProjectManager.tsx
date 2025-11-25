@@ -118,19 +118,20 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
   const handleFinalizeCreate = () => {
     if (!newProjectTitle || !newProjectClient) return;
 
-    const milestones: Milestone[] = generatedPlan?.milestones.map((m, idx) => ({
+    // Defensive mapping
+    const milestones: Milestone[] = (generatedPlan?.milestones || []).map((m, idx) => ({
         id: Math.random().toString(36).substr(2, 9),
         title: m.title,
         isCompleted: false,
         dueDate: new Date(Date.now() + (m.dueDateOffsetDays * 86400000)).toISOString().split('T')[0]
-    })) || [];
+    }));
 
-    const risks: ProjectRisk[] = generatedPlan?.risks.map((r, idx) => ({
+    const risks: ProjectRisk[] = (generatedPlan?.risks || []).map((r, idx) => ({
         id: Math.random().toString(36).substr(2, 9),
         risk: r.risk,
         impact: r.impact as any,
         mitigation: r.mitigation
-    })) || [];
+    }));
 
     const newProject: Project = {
         id: Math.random().toString(36).substr(2, 9),
@@ -170,7 +171,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
     const updatedProject = { ...selectedProject, milestones: updatedMilestones };
     
     // Auto update status if all done
-    if (updatedMilestones.every(m => m.isCompleted)) {
+    if (updatedMilestones.length > 0 && updatedMilestones.every(m => m.isCompleted)) {
         updatedProject.status = 'completed';
     } else if (updatedProject.status === 'completed') {
         updatedProject.status = 'active';
@@ -198,14 +199,14 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
       // Merge results
       const existingCompleted = selectedProject.milestones.filter(m => m.isCompleted);
       
-      const newMilestones: Milestone[] = result.newMilestones.map(m => ({
+      const newMilestones: Milestone[] = (result.newMilestones || []).map(m => ({
         id: Math.random().toString(36).substr(2, 9),
         title: m.title,
         isCompleted: false,
         dueDate: new Date(Date.now() + (m.dueDateOffsetDays * 86400000)).toISOString().split('T')[0]
       }));
 
-      const newRisks: ProjectRisk[] = result.newRisks.map(r => ({
+      const newRisks: ProjectRisk[] = (result.newRisks || []).map(r => ({
         id: Math.random().toString(36).substr(2, 9),
         risk: r.risk,
         impact: r.impact as any,
@@ -215,7 +216,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
       const updatedProject: Project = {
           ...selectedProject,
           milestones: [...existingCompleted, ...newMilestones],
-          risks: [...selectedProject.risks, ...newRisks]
+          risks: [...(selectedProject.risks || []), ...newRisks]
       };
 
       onUpdateProject(updatedProject);
@@ -389,7 +390,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                         <div>
                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Suggested Milestones</h4>
                             <div className="space-y-2">
-                                {generatedPlan.milestones.map((m, i) => (
+                                {(generatedPlan.milestones || []).map((m, i) => (
                                     <div key={i} className="flex items-center gap-3 p-2 rounded bg-slate-900/30 border border-slate-700/50">
                                         <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">{i+1}</div>
                                         <div className="flex-1">
@@ -398,13 +399,16 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                                         </div>
                                     </div>
                                 ))}
+                                {(!generatedPlan.milestones || generatedPlan.milestones.length === 0) && (
+                                    <p className="text-slate-500 text-sm italic">No milestones generated.</p>
+                                )}
                             </div>
                         </div>
 
                         <div>
                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Risk Radar</h4>
                             <div className="grid gap-2">
-                                {generatedPlan.risks.map((r, i) => (
+                                {(generatedPlan.risks || []).map((r, i) => (
                                     <div key={i} className="p-3 rounded bg-red-500/5 border border-red-500/20">
                                         <div className="flex justify-between items-start mb-1">
                                             <span className="text-sm font-bold text-red-400">{r.risk}</span>
@@ -413,6 +417,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                                         <p className="text-xs text-slate-400 italic">Mitigation: {r.mitigation}</p>
                                     </div>
                                 ))}
+                                {(!generatedPlan.risks || generatedPlan.risks.length === 0) && (
+                                    <p className="text-slate-500 text-sm italic">No risks generated.</p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -441,9 +448,10 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
   const renderDetail = () => {
     if (!selectedProject) return null;
     const client = clients.find(c => c.id === selectedProject.clientId);
-    const completedMilestones = selectedProject.milestones.filter(m => m.isCompleted).length;
-    const progress = selectedProject.milestones.length > 0 
-        ? Math.round((completedMilestones / selectedProject.milestones.length) * 100) 
+    const milestones = selectedProject.milestones || [];
+    const completedMilestones = milestones.filter(m => m.isCompleted).length;
+    const progress = milestones.length > 0 
+        ? Math.round((completedMilestones / milestones.length) * 100) 
         : 0;
 
     return (
@@ -549,7 +557,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                          <Flag className="text-indigo-400" size={20} /> Milestones
                      </h3>
                      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-                         {selectedProject.milestones.map((m, i) => {
+                         {milestones.map((m, i) => {
                              const isEditing = editingMilestoneId === m.id;
                              return (
                              <div 
@@ -611,6 +619,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                                  )}
                              </div>
                          )})}
+                         {milestones.length === 0 && (
+                             <div className="p-4 text-center text-slate-500 italic">No milestones defined.</div>
+                         )}
                      </div>
                 </div>
 
@@ -621,7 +632,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                             <AlertTriangle className="text-red-400" size={20} /> Risk Assessment
                         </h3>
                         <div className="space-y-3">
-                            {selectedProject.risks.map(r => (
+                            {(selectedProject.risks || []).map(r => (
                                 <div key={r.id} className="bg-slate-800 border-l-4 border-red-500/50 rounded-r-lg p-4">
                                     <div className="flex justify-between items-start mb-1">
                                         <h4 className="text-sm font-bold text-slate-200">{r.risk}</h4>
@@ -630,6 +641,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                                     <p className="text-xs text-slate-400">{r.mitigation}</p>
                                 </div>
                             ))}
+                            {(!selectedProject.risks || selectedProject.risks.length === 0) && (
+                                <p className="text-sm text-slate-500 italic">No risks identified.</p>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -656,8 +670,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map(project => {
                 const client = clients.find(c => c.id === project.clientId);
-                const completed = project.milestones.filter(m => m.isCompleted).length;
-                const total = project.milestones.length;
+                const milestones = project.milestones || [];
+                const completed = milestones.filter(m => m.isCompleted).length;
+                const total = milestones.length;
                 const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
                 return (

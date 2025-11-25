@@ -121,9 +121,28 @@ export interface ProjectTemplate {
   };
 }
 
+// --- Quarterly Rocks Types ---
+
+export interface KeyResult {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+}
+
+export interface Rock {
+  id: string;
+  title: string; // The "What"
+  description: string; // The "Why" / Context
+  status: 'on-track' | 'at-risk' | 'off-track' | 'completed';
+  quarter: string; // e.g., "Q1 2024"
+  keyResults: KeyResult[]; // The "How" (Measurables)
+  createdAt: number;
+}
+
 export enum ViewMode {
   DASHBOARD = 'DASHBOARD',
-  PROJECTS = 'PROJECTS', // New View
+  PROJECTS = 'PROJECTS',
+  ROCKS = 'ROCKS', // New View
   TASKS = 'TASKS',
   CLIENTS = 'CLIENTS',
   TIMELINE = 'TIMELINE',

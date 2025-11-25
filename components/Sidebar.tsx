@@ -1,6 +1,6 @@
 import React from 'react';
 import { ViewMode } from '../types';
-import { LayoutDashboard, CheckSquare, Users, PieChart, Zap, CalendarClock, Search, Disc, FolderKanban } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, Users, PieChart, Zap, CalendarClock, Search, Disc, FolderKanban, Mountain } from 'lucide-react';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -11,9 +11,10 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick }) => {
   const navItems = [
     { id: ViewMode.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard, domId: 'nav-dashboard' },
-    { id: ViewMode.PROJECTS, label: 'Projects', icon: FolderKanban, domId: 'nav-projects' },
-    { id: ViewMode.TASKS, label: 'Tasks & Tickets', icon: CheckSquare, domId: 'nav-tasks' },
     { id: ViewMode.TIMELINE, label: 'Day Timeline', icon: CalendarClock, domId: 'nav-timeline' },
+    { id: ViewMode.TASKS, label: 'Tasks & Tickets', icon: CheckSquare, domId: 'nav-tasks' },
+    { id: ViewMode.ROCKS, label: 'Quarterly Rocks', icon: Mountain, domId: 'nav-rocks' },
+    { id: ViewMode.PROJECTS, label: 'Projects', icon: FolderKanban, domId: 'nav-projects' },
     { id: ViewMode.CLIENTS, label: 'Clients', icon: Users, domId: 'nav-clients' },
     { id: ViewMode.REPORTS, label: 'Analytics', icon: PieChart, domId: 'nav-reports' },
   ];

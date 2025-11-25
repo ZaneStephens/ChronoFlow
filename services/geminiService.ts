@@ -73,7 +73,8 @@ export const generateSubtasks = async (
     const text = response.text;
     if (!text) return [];
     
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.error("Gemini AI Error:", error);
     return [];
@@ -256,7 +257,12 @@ export const generateProjectPlan = async (
     const text = response.text;
     if (!text) throw new Error("No response from AI");
     
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    return {
+        description: parsed.description || "No description generated.",
+        milestones: Array.isArray(parsed.milestones) ? parsed.milestones : [],
+        risks: Array.isArray(parsed.risks) ? parsed.risks : []
+    };
   } catch (error) {
     console.error("Gemini AI Project Plan Error:", error);
     return {
@@ -337,7 +343,11 @@ export const updateProjectPlan = async (
         const text = response.text;
         if (!text) throw new Error("No response from AI");
         
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        return {
+            newMilestones: Array.isArray(parsed.newMilestones) ? parsed.newMilestones : [],
+            newRisks: Array.isArray(parsed.newRisks) ? parsed.newRisks : []
+        };
       } catch (error) {
         console.error("Gemini AI Re-Plan Error:", error);
         return {
@@ -346,3 +356,67 @@ export const updateProjectPlan = async (
         };
       }
 }
+
+// --- Quarterly Rocks AI ---
+
+export const generateRockPlan = async (
+  rawGoal: string
+): Promise<{ title: string; description: string; keyResults: { title: string }[] }> => {
+  const ai = getAiClient();
+
+  const prompt = `
+    User Input: "${rawGoal}"
+    
+    Act as an expert EOS (Entrepreneurial Operating System) Implementer.
+    Convert the user's input into a "Quarterly Rock" (90-day goal).
+    
+    JSON Output Requirements:
+    1. title: A single, concise, imperative sentence stating the goal (max 10-15 words). DO NOT include dates, reasoning, or "smart" analysis here. Just the goal (e.g., "Achieve Azure Certification").
+    2. description: A professional justification of why this is important (business context).
+    3. keyResults: An array of 3-5 clear, measurable milestones or success criteria.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a helpful assistant that outputs strict JSON. You value conciseness. You never include internal monologue, dates, or reasoning in the JSON fields. You return only the requested structured data.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            keyResults: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response from AI");
+
+    const parsed = JSON.parse(text);
+    return {
+        title: parsed.title || rawGoal,
+        description: parsed.description || "",
+        keyResults: Array.isArray(parsed.keyResults) ? parsed.keyResults : []
+    };
+  } catch (error) {
+    console.error("Gemini AI Rock Plan Error:", error);
+    return {
+      title: rawGoal,
+      description: "Could not generate SMART refinements.",
+      keyResults: []
+    };
+  }
+};
