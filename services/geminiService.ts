@@ -7,18 +7,32 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-export const generateSubtasks = async (taskTitle: string, taskDescription: string): Promise<{ title: string }[]> => {
+export const generateSubtasks = async (taskTitle: string, taskDescription: string, mode: 'technical' | 'csm' = 'technical'): Promise<{ title: string }[]> => {
   const ai = getAiClient();
   
+  let systemInstruction = "";
+  
+  if (mode === 'technical') {
+    systemInstruction = `
+      You are an expert IT Support Professional specializing in the Microsoft Stack (Azure, Microsoft 365, Intune, Windows Server, PowerShell).
+      Break down the task into 3 to 6 actionable, technical subtasks to troubleshoot or accomplish the goal.
+      Focus on specific technical steps (e.g., "Check Entra ID logs", "Verify Intune policy sync").
+    `;
+  } else {
+    systemInstruction = `
+      You are a dedicated Customer Success Manager (CSM) & Account Manager.
+      Break down the task into 3 to 6 non-technical, client-facing subtasks.
+      Focus on relationship management, setting expectations, communicating business value, and follow-up. 
+      (e.g., "Schedule kick-off call", "Draft impact summary email", "Review SLA requirements").
+    `;
+  }
+
   const prompt = `
-    You are an expert IT Support Professional specializing in the Microsoft Stack (Azure, Microsoft 365, Intune, Windows Server, PowerShell).
-    Break down the following task into 3 to 6 actionable, technical subtasks - the first task should ideally point to a microsoft learn link that covers the issue, for this you will need to perform a search and provide a working link.
-    
     Task: ${taskTitle}
     Description: ${taskDescription}
     
     Return ONLY a raw JSON array of objects with a 'title' property. 
-    Example: [{"title": "Check Entra ID sync logs"}, {"title": "Update GPO configurations"}, {"title": "Run PowerShell script to verify users"}]
+    Example: [{"title": "Step 1"}, {"title": "Step 2"}]
   `;
 
   try {
@@ -26,6 +40,7 @@ export const generateSubtasks = async (taskTitle: string, taskDescription: strin
       model: "gemini-2.5-flash",
       contents: prompt,
       config: {
+        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,

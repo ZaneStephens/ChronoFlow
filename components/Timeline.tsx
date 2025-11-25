@@ -48,8 +48,8 @@ const Timeline: React.FC<TimelineProps> = ({
   const [optimisticStartTime, setOptimisticStartTime] = useState<number | null>(null);
 
   // Constants for Layout
-  const START_HOUR = 0;
-  const END_HOUR = 24; // 6 PM
+  const START_HOUR = 6; //6 AM
+  const END_HOUR = 18; // 6 PM
   const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * pixelsPerHour;
 
   // Update Sydney Time Clock

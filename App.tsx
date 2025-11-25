@@ -228,6 +228,10 @@ const App: React.FC = () => {
     setSubtasks(subtasks.filter(s => s.taskId !== taskId));
   };
 
+  const deleteSubtask = (subtaskId: string) => {
+      setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
+  };
+
   const toggleSubtask = (subtaskId: string) => {
     setSubtasks(subtasks.map(s => 
       s.id === subtaskId ? { ...s, isCompleted: !s.isCompleted } : s
@@ -260,6 +264,11 @@ const App: React.FC = () => {
 
   const handleStopClick = () => {
     if (activeTimer) stopTimerRequest(activeTimer);
+  };
+
+  // NEW: Cancel Active Timer directly
+  const cancelActiveTimer = () => {
+    setActiveTimer(null);
   };
 
   const stopTimerRequest = (timer: ActiveTimer) => {
@@ -758,6 +767,7 @@ const App: React.FC = () => {
                  onUpdateSubtask={updateSubtaskTitle}
                  onAddSubtasks={addSubtasks}
                  onDeleteTask={deleteTask}
+                 onDeleteSubtask={deleteSubtask}
                  onUpdateTaskStatus={updateTaskStatus}
                  onToggleSubtask={toggleSubtask}
                  onStartTimer={startTimer}
@@ -813,6 +823,7 @@ const App: React.FC = () => {
           tasks={tasks} 
           subtasks={subtasks} 
           stopTimer={handleStopClick} 
+          cancelTimer={cancelActiveTimer}
         />
       )}
 

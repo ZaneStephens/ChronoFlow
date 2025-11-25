@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { TimerSession, Task, Subtask, Client } from '../types';
 import { X, Save, Clock, Trash2, AlertCircle, CheckSquare, Zap } from 'lucide-react';
@@ -31,6 +29,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Allocation State
   const [isAllocating, setIsAllocating] = useState(false);
@@ -42,6 +41,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setShowDeleteConfirm(false);
+      setError(null);
       
       const activeTaskId = session?.taskId || initialData?.taskId;
       const activeCustomTitle = session?.customTitle;
@@ -69,6 +69,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
   if (!isOpen) return null;
 
   const handleSave = () => {
+    setError(null);
     const updates: Partial<TimerSession> = { notes };
     
     if (isAllocating) {
@@ -102,16 +103,26 @@ const SessionModal: React.FC<SessionModalProps> = ({
       const month = date.getMonth();
       const day = date.getDate();
 
+      let newStart = session.startTime;
+      let newEnd = session.endTime || Date.now();
+
       if (startTime) {
         const [h, m] = startTime.split(':').map(Number);
-        const newStart = new Date(year, month, day, h, m).getTime();
+        newStart = new Date(year, month, day, h, m).getTime();
         updates.startTime = newStart;
       }
 
       if (endTime) {
         const [h, m] = endTime.split(':').map(Number);
-        const newEnd = new Date(year, month, day, h, m).getTime();
+        newEnd = new Date(year, month, day, h, m).getTime();
         updates.endTime = newEnd;
+      }
+
+      // Validation: End time cannot be before start time
+      // This specifically catches the 12AM (00:00) vs 12PM (12:00) mixup 
+      if (newEnd < newStart) {
+        setError('End time cannot be before Start time. Did you mean xx:xx PM?');
+        return;
       }
     }
 
@@ -143,6 +154,13 @@ const SessionModal: React.FC<SessionModalProps> = ({
         </div>
         
         <div className="p-6 space-y-4 overflow-y-auto">
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/50 text-red-300 p-3 rounded-lg flex items-start gap-2 text-sm">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <p>{error}</p>
+            </div>
+          )}
+
           {!isAllocating ? (
             <div className="bg-slate-700/30 p-3 rounded-lg border border-slate-700">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Task</p>
@@ -224,7 +242,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none ${error ? 'border-red-500' : 'border-slate-700'}`}
                 />
               </div>
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Task, Subtask, Client, ActiveTimer } from '../types';
-import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye, Pencil, Save, X } from 'lucide-react';
+import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye, Pencil, Save, X, Briefcase } from 'lucide-react';
 import { generateSubtasks } from '../services/geminiService';
 
 interface TaskBoardProps {
@@ -13,6 +13,7 @@ interface TaskBoardProps {
   onUpdateSubtask: (subtaskId: string, title: string) => void;
   onAddSubtasks: (taskId: string, subtasks: { title: string }[]) => void;
   onDeleteTask: (taskId: string) => void;
+  onDeleteSubtask: (subtaskId: string) => void;
   onUpdateTaskStatus: (taskId: string, status: Task['status']) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onStartTimer: (taskId: string, subtaskId?: string) => void;
@@ -29,6 +30,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   onUpdateSubtask,
   onAddSubtasks,
   onDeleteTask,
+  onDeleteSubtask,
   onUpdateTaskStatus,
   onToggleSubtask,
   onStartTimer,
@@ -108,10 +110,10 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     setManualSubtaskInputs(prev => ({...prev, [taskId]: ''}));
   };
 
-  const handleGenerateSubtasks = async (task: Task) => {
+  const handleGenerateSubtasks = async (task: Task, mode: 'technical' | 'csm') => {
     setIsAiLoading(task.id);
     try {
-      const generated = await generateSubtasks(task.title, task.description);
+      const generated = await generateSubtasks(task.title, task.description, mode);
       if (generated.length > 0) {
         onAddSubtasks(task.id, generated);
         // Auto expand
@@ -562,13 +564,22 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                             <span className="text-xs text-slate-500 font-mono">{formatDuration(subtask.totalTime)}</span>
                             
                             {!isSubEditing && !isDone && (
-                                <button 
-                                    onClick={() => startEditSubtask(subtask)}
-                                    className="p-1.5 text-slate-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
-                                    title="Edit Subtask"
-                                >
-                                    <Pencil size={14} />
-                                </button>
+                                <>
+                                  <button 
+                                      onClick={() => startEditSubtask(subtask)}
+                                      className="p-1.5 text-slate-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
+                                      title="Edit Subtask"
+                                  >
+                                      <Pencil size={14} />
+                                  </button>
+                                  <button 
+                                      onClick={() => onDeleteSubtask(subtask.id)}
+                                      className="p-1.5 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                      title="Delete Subtask"
+                                  >
+                                      <Trash2 size={14} />
+                                  </button>
+                                </>
                             )}
 
                             <button
@@ -610,18 +621,32 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
 
                   {!isDone && (
                     <div className="mt-4 pt-2 flex items-center gap-3 border-t border-slate-800">
+                        {/* Technical Breakdown */}
                         <button
-                        id="ai-breakdown-btn"
-                        onClick={() => handleGenerateSubtasks(task)}
-                        disabled={isAiLoading === task.id}
-                        className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 transition-colors"
+                          onClick={() => handleGenerateSubtasks(task, 'technical')}
+                          disabled={isAiLoading === task.id}
+                          className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 transition-colors"
                         >
-                        {isAiLoading === task.id ? (
-                            <div className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full" />
-                        ) : (
-                            <Wand2 size={14} />
-                        )}
-                        AI Breakdown (MS Stack)
+                          {isAiLoading === task.id ? (
+                              <div className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full" />
+                          ) : (
+                              <Wand2 size={14} />
+                          )}
+                          AI Breakdown (Technical)
+                        </button>
+
+                        {/* CSM Breakdown */}
+                        <button
+                          onClick={() => handleGenerateSubtasks(task, 'csm')}
+                          disabled={isAiLoading === task.id}
+                          className="text-xs font-medium text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
+                        >
+                          {isAiLoading === task.id ? (
+                              <div className="animate-spin h-3 w-3 border-2 border-emerald-400 border-t-transparent rounded-full" />
+                          ) : (
+                              <Briefcase size={14} />
+                          )}
+                          AI Breakdown (CSM)
                         </button>
                     </div>
                   )}

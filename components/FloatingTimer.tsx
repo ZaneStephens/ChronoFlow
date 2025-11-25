@@ -1,17 +1,16 @@
-
-
 import React, { useEffect, useState } from 'react';
 import { ActiveTimer, Task, Subtask } from '../types';
-import { Square, Clock } from 'lucide-react';
+import { Square, Clock, Trash2 } from 'lucide-react';
 
 interface FloatingTimerProps {
   activeTimer: ActiveTimer | null;
   tasks: Task[];
   subtasks: Subtask[];
   stopTimer: () => void;
+  cancelTimer: () => void;
 }
 
-const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subtasks, stopTimer }) => {
+const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subtasks, stopTimer, cancelTimer }) => {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -88,13 +87,23 @@ const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subta
         <div className="text-3xl md:text-4xl font-mono font-bold tabular-nums tracking-tighter text-white drop-shadow-[0_0_15px_rgba(99,102,241,0.4)]">
           {isFuture ? '-' : ''}{formatTime(elapsed)}
         </div>
-        <button
-          onClick={stopTimer}
-          className="group bg-red-500 hover:bg-red-600 text-white p-3 md:p-4 rounded-xl transition-all hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:shadow-[0_0_30px_rgba(239,68,68,0.5)] border border-red-400/50"
-          title="Stop Timer"
-        >
-          <Square size={20} fill="currentColor" />
-        </button>
+        
+        <div className="flex items-center gap-2">
+            <button
+                onClick={cancelTimer}
+                className="group bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 p-3 md:p-4 rounded-xl transition-all border border-slate-700 hover:border-red-400/50"
+                title="Discard Timer"
+            >
+                <Trash2 size={20} />
+            </button>
+            <button
+            onClick={stopTimer}
+            className="group bg-red-500 hover:bg-red-600 text-white p-3 md:p-4 rounded-xl transition-all hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:shadow-[0_0_30px_rgba(239,68,68,0.5)] border border-red-400/50"
+            title="Stop & Save Timer"
+            >
+            <Square size={20} fill="currentColor" />
+            </button>
+        </div>
       </div>
     </div>
   );
