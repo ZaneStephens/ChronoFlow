@@ -4,7 +4,7 @@ import { generateProjectPlan, updateProjectPlan } from '../services/geminiServic
 import { 
   Plus, Calendar, AlertTriangle, CheckCircle2, Circle, 
   Sparkles, Loader2, ArrowRight, LayoutTemplate, Briefcase, 
-  ChevronRight, MoreVertical, Trash2, X, Flag, Zap, Clock, Edit2, Save, RotateCw, Copy
+  ChevronRight, MoreVertical, Trash2, X, Flag, Zap, Clock, Edit2, Save, RotateCw, Copy, Archive
 } from 'lucide-react';
 
 interface ProjectManagerProps {
@@ -153,6 +153,15 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
     setView('detail');
   };
 
+  const handleDeleteProject = () => {
+      if (!selectedProject) return;
+      if (window.confirm("Are you sure you want to delete this project? This cannot be undone.")) {
+          onDeleteProject(selectedProject.id);
+          setView('list');
+          setSelectedProject(null);
+      }
+  }
+
   const toggleMilestone = (milestoneId: string) => {
     if (!selectedProject) return;
     const updatedMilestones = selectedProject.milestones.map(m => 
@@ -206,7 +215,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
       const updatedProject: Project = {
           ...selectedProject,
           milestones: [...existingCompleted, ...newMilestones],
-          risks: [...selectedProject.risks, ...newRisks] // Append new risks or replace? Let's append for history, but maybe filtering dups is better. For now append.
+          risks: [...selectedProject.risks, ...newRisks]
       };
 
       onUpdateProject(updatedProject);
@@ -451,9 +460,20 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300 uppercase tracking-wider" style={{ color: client?.color }}>
                                  {client?.name}
                              </span>
-                             <div className={`text-xs font-bold px-2 py-0.5 rounded border ${getStatusColor(selectedProject.status)} uppercase tracking-wider`}>
-                                 {selectedProject.status}
-                             </div>
+                             <select
+                                value={selectedProject.status}
+                                onChange={(e) => {
+                                    const updated = { ...selectedProject, status: e.target.value as any };
+                                    onUpdateProject(updated);
+                                    setSelectedProject(updated);
+                                }}
+                                className={`text-xs font-bold px-2 py-0.5 rounded border uppercase tracking-wider cursor-pointer outline-none focus:ring-1 focus:ring-white/50 ${getStatusColor(selectedProject.status)}`}
+                             >
+                                <option value="planning" className="bg-slate-800 text-blue-400">Planning</option>
+                                <option value="active" className="bg-slate-800 text-emerald-400">Active</option>
+                                <option value="on-hold" className="bg-slate-800 text-amber-400">On Hold</option>
+                                <option value="completed" className="bg-slate-800 text-slate-400">Completed</option>
+                             </select>
                              <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
                                 <Clock size={12} /> {getTotalHours(selectedProject.id)}h Logged
                              </span>
@@ -463,11 +483,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                     </div>
                     
                     <div className="flex flex-col items-end gap-3">
-                        <div className="text-right">
-                            <div className="text-4xl font-bold text-white mb-1">{progress}%</div>
-                            <p className="text-xs text-slate-500 uppercase tracking-wider">Completion</p>
-                        </div>
-                        <div className="flex gap-2">
+                         <div className="flex gap-2 mb-2">
                              <button 
                                 onClick={handleSaveAsTemplate}
                                 className="text-xs flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded transition-colors"
@@ -480,6 +496,16 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                              >
                                 <RotateCw size={12} /> Re-plan
                              </button>
+                             <button
+                                onClick={handleDeleteProject}
+                                className="text-xs flex items-center gap-1 bg-red-900/20 hover:bg-red-900/50 text-red-400 border border-red-900/30 px-3 py-1.5 rounded transition-colors"
+                             >
+                                <Trash2 size={12} /> Delete
+                             </button>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-4xl font-bold text-white mb-1">{progress}%</div>
+                            <p className="text-xs text-slate-500 uppercase tracking-wider">Completion</p>
                         </div>
                     </div>
                 </div>
@@ -655,38 +681,25 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                             </div>
                         </div>
                         
-                        <p className="text-sm text-slate-400 mb-6 line-clamp-2 h-10">
-                            {project.description}
-                        </p>
-
+                        <p className="text-sm text-slate-400 mb-6 line-clamp-2 h-10">{project.description}</p>
+                        
                         <div className="space-y-2">
-                            <div className="flex justify-between text-xs text-slate-500">
+                            <div className="flex justify-between text-xs text-slate-400">
                                 <span>Progress</span>
-                                <span>{completed}/{total} Milestones</span>
+                                <span>{percent}%</span>
                             </div>
                             <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                <div className="h-full bg-indigo-500" style={{ width: `${percent}%` }}></div>
+                                <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${percent}%` }}></div>
                             </div>
-                        </div>
-
-                        <div className="mt-6 pt-4 border-t border-slate-700/50 flex justify-between items-center">
-                            <div className="flex -space-x-2">
-                                {/* Placeholder for assignee avatars if we had them */}
-                                <div className="w-6 h-6 rounded-full bg-slate-600 border-2 border-slate-800 flex items-center justify-center text-[8px] text-white">JD</div>
-                            </div>
-                            <span className="text-xs text-slate-500 flex items-center gap-1">
-                                <Calendar size={12} /> {project.startDate}
-                            </span>
                         </div>
                     </div>
                 );
             })}
             
             {projects.length === 0 && (
-                <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-xl">
-                    <Briefcase size={48} className="mb-4 opacity-20" />
-                    <p className="text-lg font-medium">No projects active.</p>
-                    <button onClick={handleCreateClick} className="mt-4 text-indigo-400 hover:underline text-sm">Create your first project</button>
+                <div className="col-span-full py-16 text-center border-2 border-dashed border-slate-800 rounded-xl text-slate-500">
+                    <Briefcase size={48} className="mx-auto mb-4 opacity-20" />
+                    <p>No projects yet. Start a new initiative!</p>
                 </div>
             )}
         </div>

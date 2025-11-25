@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TimerSession, Task, Subtask, Client, Project } from '../types';
-import { X, Save, Clock, Trash2, AlertCircle, CheckSquare, Zap, FolderKanban } from 'lucide-react';
+import { X, Save, Clock, Trash2, AlertCircle, CheckSquare, Zap, FolderKanban, Bold, Italic, List } from 'lucide-react';
 
 interface SessionModalProps {
   isOpen: boolean;
@@ -32,12 +32,12 @@ const SessionModal: React.FC<SessionModalProps> = ({
   const [endTime, setEndTime] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   
   // Allocation State
   const [isAllocating, setIsAllocating] = useState(false);
   const [allocType, setAllocType] = useState<'task' | 'quick' | 'project'>('task');
   const [selectedTaskId, setSelectedTaskId] = useState('');
-  // quickTitle is no longer used for input, but we'll generate one on save
   const [quickClientId, setQuickClientId] = useState('');
   
   // Project Allocation State
@@ -55,7 +55,6 @@ const SessionModal: React.FC<SessionModalProps> = ({
 
       // Check if we need to allocate (Unallocated Task)
       if (!activeTaskId && !activeCustomTitle && !activeProjectId && (mode === 'create' || mode === 'stop' || (mode === 'edit' && session))) {
-          // Check if we were passed a project ID in initialData (e.g. from ProjectManager)
           if (initialData?.projectId) {
               setIsAllocating(true);
               setAllocType('project');
@@ -73,22 +72,39 @@ const SessionModal: React.FC<SessionModalProps> = ({
           setIsAllocating(false);
       }
 
+      // Initialize Notes & Time
+      let initialNotes = '';
       if (mode === 'stop' && initialData && !initialData.notes) {
-        setNotes('');
+        initialNotes = '';
       } else if ((mode === 'edit' || mode === 'create') && session) {
-        setNotes(session.notes || '');
+        initialNotes = session.notes || '';
         setStartTime(new Date(session.startTime).toTimeString().slice(0, 5));
         setEndTime(session.endTime ? new Date(session.endTime).toTimeString().slice(0, 5) : '');
       } else if (mode === 'create' && !session) {
-          // Fresh create
           const now = new Date();
           setStartTime(now.toTimeString().slice(0, 5));
-          setEndTime(new Date(now.getTime() + 1800000).toTimeString().slice(0, 5)); // +30m
+          setEndTime(new Date(now.getTime() + 1800000).toTimeString().slice(0, 5));
       }
+      
+      setNotes(initialNotes);
+      // Wait for render to populate div
+      setTimeout(() => {
+        if (editorRef.current) {
+            editorRef.current.innerHTML = initialNotes;
+        }
+      }, 50);
+
     }
   }, [isOpen, session, initialData, mode]);
 
   if (!isOpen) return null;
+
+  const handleFormat = (command: string) => {
+    document.execCommand(command, false, undefined);
+    if (editorRef.current) {
+        setNotes(editorRef.current.innerHTML);
+    }
+  };
 
   const handleSave = () => {
     setError(null);
@@ -98,9 +114,9 @@ const SessionModal: React.FC<SessionModalProps> = ({
     
     if (isAllocating) {
         if (allocType === 'task') {
-            if (!selectedTaskId) return; // Validation
+            if (!selectedTaskId) return;
             updates.taskId = selectedTaskId;
-            updates.clientId = undefined; // Clear manual client if any
+            updates.clientId = undefined;
             updates.customTitle = undefined;
             updates.projectId = undefined;
             updates.milestoneId = undefined;
@@ -111,22 +127,20 @@ const SessionModal: React.FC<SessionModalProps> = ({
              updates.taskId = undefined;
              updates.clientId = undefined;
              
-             // Auto-generate title for project
              const proj = projects.find(p => p.id === selectedProjectId);
              const mile = proj?.milestones.find(m => m.id === selectedMilestoneId);
              let title = proj?.title || 'Project Work';
              if (mile) title += ` - ${mile.title}`;
              updates.customTitle = title;
-             // Client ID from Project
              if (proj) updates.clientId = proj.clientId;
         } else {
-            // Auto-generate title for Quick Entry
             const client = clients.find(c => c.id === quickClientId);
             let generatedTitle = 'Quick Entry';
+            // Strip HTML for title generation
+            const plainText = notes.replace(/<[^>]*>?/gm, '');
             
-            if (notes && notes.trim().length > 0) {
-                 // Use first 30 chars of notes
-                 generatedTitle = notes.substring(0, 30) + (notes.length > 30 ? '...' : '');
+            if (plainText && plainText.trim().length > 0) {
+                 generatedTitle = plainText.substring(0, 30) + (plainText.length > 30 ? '...' : '');
             } else if (client) {
                  generatedTitle = `${client.name} Log`;
             }
@@ -138,8 +152,6 @@ const SessionModal: React.FC<SessionModalProps> = ({
             updates.milestoneId = undefined;
         }
     } else {
-        // Not manually allocating, but check if we have context (like Project ID from props)
-        // This ensures creating a new log via "Add Time" on Project Manager correctly links the data
         if (activeProjectId) {
              updates.projectId = activeProjectId;
              updates.milestoneId = session?.milestoneId || initialData?.milestoneId;
@@ -154,25 +166,23 @@ const SessionModal: React.FC<SessionModalProps> = ({
 
                  updates.customTitle = contextHeader;
 
-                 // Format notes as requested: [Project] - [Milestone]: [User Input]
-                 // Only apply this formatting on creation to avoid overwriting existing edits
                  if (mode === 'create') {
-                     if (notes.trim()) {
-                         updates.notes = `${contextHeader}: ${notes}`;
-                     } else {
-                         updates.notes = contextHeader;
+                     // Notes already contain HTML from editor, append header if needed? 
+                     // Actually, for rich text, prepending "Project - Milestone: " inside the HTML is tricky.
+                     // We will just let the title handle the context and keep notes as user input.
+                     // Or, we prepend a paragraph.
+                     if (!notes.includes(contextHeader)) {
+                        updates.notes = `<b>${contextHeader}</b>: <br/>${notes}`;
                      }
                  }
              }
         }
-        // Preserve Task ID if present in context
         if (activeTaskId) {
             updates.taskId = activeTaskId;
         }
     }
 
     if ((mode === 'edit' || mode === 'create')) {
-      // Parse times
       const baseTime = session?.startTime || Date.now();
       const date = new Date(baseTime);
       const year = date.getFullYear();
@@ -194,8 +204,6 @@ const SessionModal: React.FC<SessionModalProps> = ({
         updates.endTime = newEnd;
       }
 
-      // Validation: End time cannot be before start time
-      // This specifically catches the 12AM (00:00) vs 12PM (12:00) mixup 
       if (newEnd < newStart) {
         setError('End time cannot be before Start time. Did you mean xx:xx PM?');
         return;
@@ -264,32 +272,10 @@ const SessionModal: React.FC<SessionModalProps> = ({
                     <h4 className="text-sm font-bold text-indigo-400 uppercase tracking-wider">Allocate Time</h4>
                 </div>
                 
-                {/* Type Toggle */}
                 <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-700">
-                    <button
-                        onClick={() => setAllocType('task')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${
-                            allocType === 'task' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                        }`}
-                    >
-                        <CheckSquare size={14} /> Task
-                    </button>
-                    <button
-                        onClick={() => setAllocType('project')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${
-                            allocType === 'project' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                        }`}
-                    >
-                        <FolderKanban size={14} /> Project
-                    </button>
-                    <button
-                        onClick={() => setAllocType('quick')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${
-                            allocType === 'quick' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                        }`}
-                    >
-                        <Zap size={14} /> Quick
-                    </button>
+                    <button onClick={() => setAllocType('task')} className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${allocType === 'task' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><CheckSquare size={14} /> Task</button>
+                    <button onClick={() => setAllocType('project')} className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${allocType === 'project' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><FolderKanban size={14} /> Project</button>
+                    <button onClick={() => setAllocType('quick')} className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${allocType === 'quick' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Zap size={14} /> Quick</button>
                 </div>
 
                 {allocType === 'task' && (
@@ -311,16 +297,11 @@ const SessionModal: React.FC<SessionModalProps> = ({
                      <div className="space-y-2">
                         <select
                             value={selectedProjectId}
-                            onChange={(e) => {
-                                setSelectedProjectId(e.target.value);
-                                setSelectedMilestoneId('');
-                            }}
+                            onChange={(e) => { setSelectedProjectId(e.target.value); setSelectedMilestoneId(''); }}
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                         >
                             <option value="">-- Select Project --</option>
-                            {projects.map(p => (
-                                <option key={p.id} value={p.id}>{p.title}</option>
-                            ))}
+                            {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                         </select>
                         
                         {selectedProject && (
@@ -346,13 +327,8 @@ const SessionModal: React.FC<SessionModalProps> = ({
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                         >
                             <option value="">-- No Client (Personal/Admin) --</option>
-                            {clients.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
+                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
-                        <p className="text-[10px] text-slate-500 italic px-1">
-                           Title will be auto-generated from your notes below.
-                        </p>
                     </div>
                 )}
             </div>
@@ -362,21 +338,11 @@ const SessionModal: React.FC<SessionModalProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Start Time</label>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">End Time</label>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none ${error ? 'border-red-500' : 'border-slate-700'}`}
-                />
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none ${error ? 'border-red-500' : 'border-slate-700'}`} />
               </div>
             </div>
           )}
@@ -385,13 +351,29 @@ const SessionModal: React.FC<SessionModalProps> = ({
             <label className="block text-sm font-medium text-slate-400 mb-1">
               {mode === 'stop' ? 'What did you work on?' : 'Description / Notes'}
             </label>
-            <textarea
-              autoFocus={mode === 'stop'}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Debugging connection issue..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none"
-            />
+            
+            {/* Rich Text Editor */}
+            <div className="border border-slate-700 rounded-lg overflow-hidden bg-slate-900 focus-within:ring-2 focus-within:ring-indigo-500 transition-shadow">
+                <div className="flex items-center gap-1 p-2 border-b border-slate-700 bg-slate-800">
+                    <button onClick={() => handleFormat('bold')} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded" title="Bold">
+                        <Bold size={16} />
+                    </button>
+                    <button onClick={() => handleFormat('italic')} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded" title="Italic">
+                        <Italic size={16} />
+                    </button>
+                    <button onClick={() => handleFormat('insertUnorderedList')} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded" title="Bullet List">
+                        <List size={16} />
+                    </button>
+                </div>
+                <div 
+                    ref={editorRef}
+                    contentEditable 
+                    className="p-3 min-h-[120px] outline-none text-white text-sm leading-relaxed max-h-[200px] overflow-y-auto"
+                    onInput={(e) => setNotes(e.currentTarget.innerHTML)}
+                    onBlur={(e) => setNotes(e.currentTarget.innerHTML)}
+                />
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">Supports rich text. Select text to format.</p>
           </div>
         </div>
 
@@ -399,40 +381,20 @@ const SessionModal: React.FC<SessionModalProps> = ({
           <div>
             {mode !== 'create' && onDelete && (
               !showDeleteConfirm ? (
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors flex items-center gap-2"
-                >
-                  <Trash2 size={18} />
-                  <span className="text-sm">Delete</span>
+                <button onClick={() => setShowDeleteConfirm(true)} className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors flex items-center gap-2">
+                  <Trash2 size={18} /> <span className="text-sm">Delete</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
-                   <span className="text-xs text-slate-400">Sure?</span>
-                   <button 
-                     onClick={handleDelete}
-                     className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors"
-                   >
-                     Yes, Delete
-                   </button>
-                   <button 
-                     onClick={() => setShowDeleteConfirm(false)}
-                     className="p-1.5 text-slate-400 hover:text-white"
-                   >
-                     <X size={14} />
-                   </button>
+                   <button onClick={handleDelete} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors">Yes, Delete</button>
+                   <button onClick={() => setShowDeleteConfirm(false)} className="p-1.5 text-slate-400 hover:text-white"><X size={14} /></button>
                 </div>
               )
             )}
           </div>
           
           <div className="flex gap-3">
-            <button
-                onClick={onClose}
-                className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-            >
-                Cancel
-            </button>
+            <button onClick={onClose} className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">Cancel</button>
             <button
                 onClick={handleSave}
                 disabled={isAllocating && (allocType === 'task' && !selectedTaskId)}

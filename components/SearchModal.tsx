@@ -45,6 +45,7 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessi
     // Search Sessions (Notes)
     sessions.forEach(session => {
        let score = 0;
+       // We need to check stripHtml content too, but checking raw HTML string is usually fine for search
        if (session.notes && session.notes.toLowerCase().includes(lowerQuery)) score += 10;
        if (session.customTitle && session.customTitle.toLowerCase().includes(lowerQuery)) score += 10;
        
@@ -55,6 +56,12 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessi
 
     setResults(hits.sort((a, b) => b.score - a.score));
   }, [query, tasks, sessions]);
+
+  const stripHtml = (html: string) => {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  };
 
   if (!isOpen) return null;
 
@@ -117,7 +124,7 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessi
                      {session.notes && (
                        <div className="flex items-start gap-2 text-sm text-slate-400 bg-slate-800/50 p-2 rounded">
                           <FileText size={14} className="mt-0.5 shrink-0" />
-                          <span className="line-clamp-2">{session.notes}</span>
+                          <span className="line-clamp-2">{stripHtml(session.notes)}</span>
                        </div>
                      )}
                    </div>

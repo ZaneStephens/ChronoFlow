@@ -27,27 +27,18 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
 
   // Stats Calculation
   const totalSecondsTasks = tasks.reduce((acc, t) => acc + t.totalTime, 0); 
-  // Calculate seconds from "Quick Entry" sessions (those without a taskId)
   const totalSecondsQuick = sessions
     .filter(s => !s.taskId && s.endTime)
     .reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
 
   const totalSeconds = totalSecondsTasks + totalSecondsQuick;
-
-  // Add active timer to total if it exists
   const activeDuration = activeTimer ? Math.floor((now - activeTimer.startTime) / 1000) : 0;
-  // If active timer starts in future, duration is 0
   const validActiveDuration = Math.max(0, activeDuration);
-  
   const displayTotalSeconds = totalSeconds + validActiveDuration;
   const totalHours = (displayTotalSeconds / 3600).toFixed(1);
-  
   const completedTasks = tasks.filter(t => t.status === 'done').length;
-  
-  // Exclude internal clients from the "Active Clients" count
   const activeExternalClientsCount = clients.filter(c => !c.isInternal).length;
   
-  // Calculate Today's Progress
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   
@@ -59,7 +50,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
     return acc;
   }, 0);
 
-  // If active timer started today, add it
   const activeSecondsToday = (activeTimer && activeTimer.startTime >= startOfToday.getTime()) 
     ? validActiveDuration 
     : 0;
@@ -68,20 +58,16 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
   const todayProgressPercent = Math.min((totalTodaySeconds / DAILY_GOAL_SECONDS) * 100, 100);
   const remainingSeconds = Math.max(DAILY_GOAL_SECONDS - totalTodaySeconds, 0);
 
-  // Chart Data Logic: Group internal clients
   const chartData = useMemo(() => {
     const data: any[] = [];
     let internalHours = 0;
 
     clients.forEach(client => {
-      // Calculate total hours for this client (tasks + quick sessions)
       const clientTasks = tasks.filter(t => t.clientId === client.id);
       const taskSeconds = clientTasks.reduce((acc, t) => acc + t.totalTime, 0);
-      
       const quickSessions = sessions.filter(s => !s.taskId && s.clientId === client.id && s.endTime);
       const quickSeconds = quickSessions.reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
 
-      // Add active time if relevant to this client
       let additional = 0;
       if (activeTimer) {
          const activeTask = tasks.find(t => t.id === activeTimer.taskId);
@@ -102,10 +88,9 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
     });
 
     if (internalHours > 0) {
-      data.push({ name: 'Internal Work', hours: parseFloat(internalHours.toFixed(2)), color: '#94a3b8' }); // slate-400 color
+      data.push({ name: 'Internal Work', hours: parseFloat(internalHours.toFixed(2)), color: '#94a3b8' });
     }
     
-    // Add Unassigned Quick Entries to chart
     const unassignedQuickSeconds = sessions
         .filter(s => !s.taskId && !s.clientId && s.endTime)
         .reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
@@ -114,7 +99,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
         data.push({
             name: 'Unassigned',
             hours: parseFloat((unassignedQuickSeconds / 3600).toFixed(2)),
-            color: '#10b981' // emerald-500
+            color: '#10b981'
         });
     }
 
@@ -125,6 +110,12 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     return `${h}h ${m}m`;
+  };
+
+  const stripHtml = (html: string) => {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
   };
 
   const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => (
@@ -167,31 +158,13 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
           <p className="text-xs text-slate-500 mt-2 text-right">{formatDuration(remainingSeconds)} remaining</p>
         </div>
 
-        <StatCard 
-          title="Total Tracked" 
-          value={`${totalHours}h`} 
-          icon={Clock} 
-          color="bg-blue-500 text-blue-400" 
-          subtext="Lifetime total"
-        />
-        <StatCard 
-          title="Completed Tasks" 
-          value={completedTasks} 
-          icon={CheckCircle2} 
-          color="bg-indigo-500 text-indigo-400" 
-        />
-        <StatCard 
-          title="Active Clients" 
-          value={activeExternalClientsCount} 
-          icon={TrendingUp} 
-          color="bg-purple-500 text-purple-400"
-          subtext="External only"
-        />
+        <StatCard title="Total Tracked" value={`${totalHours}h`} icon={Clock} color="bg-blue-500 text-blue-400" subtext="Lifetime total" />
+        <StatCard title="Completed Tasks" value={completedTasks} icon={CheckCircle2} color="bg-indigo-500 text-indigo-400" />
+        <StatCard title="Active Clients" value={activeExternalClientsCount} icon={TrendingUp} color="bg-purple-500 text-purple-400" subtext="External only" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8 h-full">
         <div className="lg:col-span-2 space-y-8">
-          {/* Chart */}
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 h-96">
             <h3 className="text-lg font-semibold text-white mb-6">Time Distribution by Client</h3>
             <div className="h-full pb-8">
@@ -224,7 +197,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
             {sessions.slice().reverse().slice(0, 8).map(session => {
               const task = session.taskId ? tasks.find(t => t.id === session.taskId) : null;
               const duration = session.endTime ? ((session.endTime - session.startTime) / 1000) : 0;
-              
               const isToday = session.startTime >= startOfToday.getTime();
 
               return (
@@ -232,8 +204,9 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
                   <div className={`w-2 h-2 rounded-full mt-1 ${isToday ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-200 truncate">{task ? task.title : (session.customTitle || 'Quick Log')}</p>
-                    <p className="text-xs text-slate-500">
-                      {isToday ? 'Today' : new Date(session.startTime).toLocaleDateString()}
+                    <p className="text-xs text-slate-500 flex justify-between">
+                      <span>{isToday ? 'Today' : new Date(session.startTime).toLocaleDateString()}</span>
+                      {session.notes && <span className="truncate max-w-[100px] ml-2 text-slate-600 italic">{stripHtml(session.notes)}</span>}
                     </p>
                   </div>
                   <div className="text-xs font-mono text-slate-400">
