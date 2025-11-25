@@ -113,7 +113,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const handleGenerateSubtasks = async (task: Task, mode: 'technical' | 'csm') => {
     setIsAiLoading(task.id);
     try {
-      const generated = await generateSubtasks(task.title, task.description, mode);
+      const client = clients.find(c => c.id === task.clientId);
+      const generated = await generateSubtasks(task.title, task.description, mode, client?.isInternal || false);
       if (generated.length > 0) {
         onAddSubtasks(task.id, generated);
         // Auto expand

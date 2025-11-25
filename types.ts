@@ -7,7 +7,7 @@ export interface Client {
   contactName?: string;
   contactEmail?: string;
   services?: string;
-  isInternal?: boolean; // New: Marks client as internal work (excluded from active counts, grouped in charts)
+  isInternal?: boolean; 
 }
 
 export interface Subtask {
@@ -21,20 +21,23 @@ export interface Subtask {
 export interface Task {
   id: string;
   clientId: string;
+  projectId?: string; // New: Link task to a project
   title: string;
   description: string;
-  ticketNumber?: string; // New field
+  ticketNumber?: string; 
   status: 'todo' | 'in-progress' | 'done';
-  totalTime: number; // in seconds (aggregated from sessions not linked to subtasks + subtask times)
+  totalTime: number; // in seconds
   createdAt: number;
 }
 
 export interface TimerSession {
   id: string;
-  taskId?: string; // Made optional for Quick Entries
+  taskId?: string; 
   subtaskId?: string; 
-  clientId?: string; // New: For Quick Entries linked to a client
-  customTitle?: string; // For Quick Entries
+  clientId?: string; 
+  projectId?: string; // New: Link to project
+  milestoneId?: string; // New: Link to milestone
+  customTitle?: string; 
   startTime: number;
   endTime?: number;
   notes?: string;
@@ -42,7 +45,7 @@ export interface TimerSession {
 }
 
 export interface ActiveTimer {
-  taskId?: string; // Optional for Quick Start/Gap filling
+  taskId?: string; 
   subtaskId?: string;
   startTime: number;
 }
@@ -50,45 +53,77 @@ export interface ActiveTimer {
 export interface PlannedActivity {
   id: string;
   date: string; // YYYY-MM-DD
-  startTime: number; // Timestamp for start of the slot
-  durationMinutes: number; // Default 30
+  startTime: number; 
+  durationMinutes: number; 
   type: 'task' | 'quick';
-  taskId?: string; // If type is task
-  clientId?: string; // New: If type is quick (optional)
-  quickTitle?: string; // If type is quick
-  isLogged: boolean; // If true, a corresponding session exists
-  recurringId?: string; // Link to a RecurringActivity rule if generated from one
+  taskId?: string; 
+  clientId?: string; 
+  quickTitle?: string; 
+  isLogged: boolean; 
+  recurringId?: string; 
 }
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly' | 'monthly-nth';
 
 export interface RecurringActivity {
   id: string;
-  startDate: string; // YYYY-MM-DD - Anchor for fortnightly calculations
+  startDate: string; 
   type: 'task' | 'quick';
   taskId?: string;
   clientId?: string;
-  quickTitle?: string;
-  
-  startTimeStr: string; // "HH:mm"
-  durationMinutes: number;
-  
+  quickTitle?: string; 
+  startTimeStr: string; 
+  durationMinutes: number; 
   frequency: RecurrenceFrequency;
-  
-  // Weekly
-  weekDays?: number[]; // 0 (Sun) - 6 (Sat)
-  
-  // Monthly
-  monthDay?: number; // 1-31
-  
-  // Monthly Nth
-  nthWeek?: number; // 1, 2, 3, 4, 5 (last)
-  nthWeekDay?: number; // 0 (Sun) - 6 (Sat)
+  weekDays?: number[]; 
+  monthDay?: number; 
+  nthWeek?: number; 
+  nthWeekDay?: number; 
 }
 
-// For drag and drop or simple list rendering
+// --- Project Management Types ---
+
+export interface Milestone {
+  id: string;
+  title: string;
+  dueDate?: string; // YYYY-MM-DD
+  isCompleted: boolean;
+}
+
+export interface ProjectRisk {
+  id: string;
+  risk: string;
+  impact: 'Low' | 'Medium' | 'High';
+  mitigation: string;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  clientId: string;
+  description: string;
+  status: 'planning' | 'active' | 'on-hold' | 'completed';
+  startDate: string;
+  dueDate?: string;
+  milestones: Milestone[];
+  risks: ProjectRisk[]; // AI Generated risks
+  tags?: string[];
+}
+
+export interface ProjectTemplate {
+  id: string;
+  title: string;
+  description: string;
+  prompt?: string; // For AI generation
+  structure?: { // For saved project structure
+      milestones: { title: string; dueDateOffsetDays: number }[];
+      risks: { risk: string; impact: 'Low' | 'Medium' | 'High'; mitigation: string }[];
+  };
+}
+
 export enum ViewMode {
   DASHBOARD = 'DASHBOARD',
+  PROJECTS = 'PROJECTS', // New View
   TASKS = 'TASKS',
   CLIENTS = 'CLIENTS',
   TIMELINE = 'TIMELINE',

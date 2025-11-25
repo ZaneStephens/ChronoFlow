@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { TimerSession, Task, Subtask, Client } from '../types';
-import { X, Save, Clock, Trash2, AlertCircle, CheckSquare, Zap } from 'lucide-react';
+import { TimerSession, Task, Subtask, Client, Project } from '../types';
+import { X, Save, Clock, Trash2, AlertCircle, CheckSquare, Zap, FolderKanban } from 'lucide-react';
 
 interface SessionModalProps {
   isOpen: boolean;
@@ -12,6 +12,7 @@ interface SessionModalProps {
   mode: 'edit' | 'stop' | 'create';
   tasks: Task[];
   clients?: Client[];
+  projects?: Project[];
 }
 
 const SessionModal: React.FC<SessionModalProps> = ({ 
@@ -23,7 +24,8 @@ const SessionModal: React.FC<SessionModalProps> = ({
   initialData, 
   mode,
   tasks,
-  clients = []
+  clients = [],
+  projects = []
 }) => {
   const [notes, setNotes] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -33,10 +35,14 @@ const SessionModal: React.FC<SessionModalProps> = ({
   
   // Allocation State
   const [isAllocating, setIsAllocating] = useState(false);
-  const [allocType, setAllocType] = useState<'task' | 'quick'>('task');
+  const [allocType, setAllocType] = useState<'task' | 'quick' | 'project'>('task');
   const [selectedTaskId, setSelectedTaskId] = useState('');
   // quickTitle is no longer used for input, but we'll generate one on save
   const [quickClientId, setQuickClientId] = useState('');
+  
+  // Project Allocation State
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -45,23 +51,39 @@ const SessionModal: React.FC<SessionModalProps> = ({
       
       const activeTaskId = session?.taskId || initialData?.taskId;
       const activeCustomTitle = session?.customTitle;
+      const activeProjectId = session?.projectId || initialData?.projectId;
 
       // Check if we need to allocate (Unallocated Task)
-      if (!activeTaskId && !activeCustomTitle && (mode === 'create' || mode === 'stop' || (mode === 'edit' && session))) {
-          setIsAllocating(true);
-          setAllocType('task');
-          setSelectedTaskId('');
-          setQuickClientId('');
+      if (!activeTaskId && !activeCustomTitle && !activeProjectId && (mode === 'create' || mode === 'stop' || (mode === 'edit' && session))) {
+          // Check if we were passed a project ID in initialData (e.g. from ProjectManager)
+          if (initialData?.projectId) {
+              setIsAllocating(true);
+              setAllocType('project');
+              setSelectedProjectId(initialData.projectId);
+              setSelectedMilestoneId(initialData.milestoneId || '');
+          } else {
+              setIsAllocating(true);
+              setAllocType('task');
+              setSelectedTaskId('');
+              setQuickClientId('');
+              setSelectedProjectId('');
+              setSelectedMilestoneId('');
+          }
       } else {
           setIsAllocating(false);
       }
 
-      if (mode === 'stop' && initialData) {
+      if (mode === 'stop' && initialData && !initialData.notes) {
         setNotes('');
       } else if ((mode === 'edit' || mode === 'create') && session) {
         setNotes(session.notes || '');
         setStartTime(new Date(session.startTime).toTimeString().slice(0, 5));
         setEndTime(session.endTime ? new Date(session.endTime).toTimeString().slice(0, 5) : '');
+      } else if (mode === 'create' && !session) {
+          // Fresh create
+          const now = new Date();
+          setStartTime(now.toTimeString().slice(0, 5));
+          setEndTime(new Date(now.getTime() + 1800000).toTimeString().slice(0, 5)); // +30m
       }
     }
   }, [isOpen, session, initialData, mode]);
@@ -71,6 +93,8 @@ const SessionModal: React.FC<SessionModalProps> = ({
   const handleSave = () => {
     setError(null);
     const updates: Partial<TimerSession> = { notes };
+    const activeProjectId = session?.projectId || initialData?.projectId;
+    const activeTaskId = session?.taskId || initialData?.taskId;
     
     if (isAllocating) {
         if (allocType === 'task') {
@@ -78,6 +102,23 @@ const SessionModal: React.FC<SessionModalProps> = ({
             updates.taskId = selectedTaskId;
             updates.clientId = undefined; // Clear manual client if any
             updates.customTitle = undefined;
+            updates.projectId = undefined;
+            updates.milestoneId = undefined;
+        } else if (allocType === 'project') {
+             if (!selectedProjectId) return;
+             updates.projectId = selectedProjectId;
+             updates.milestoneId = selectedMilestoneId || undefined;
+             updates.taskId = undefined;
+             updates.clientId = undefined;
+             
+             // Auto-generate title for project
+             const proj = projects.find(p => p.id === selectedProjectId);
+             const mile = proj?.milestones.find(m => m.id === selectedMilestoneId);
+             let title = proj?.title || 'Project Work';
+             if (mile) title += ` - ${mile.title}`;
+             updates.customTitle = title;
+             // Client ID from Project
+             if (proj) updates.clientId = proj.clientId;
         } else {
             // Auto-generate title for Quick Entry
             const client = clients.find(c => c.id === quickClientId);
@@ -93,18 +134,53 @@ const SessionModal: React.FC<SessionModalProps> = ({
             updates.customTitle = generatedTitle;
             updates.clientId = quickClientId || undefined;
             updates.taskId = undefined;
+            updates.projectId = undefined;
+            updates.milestoneId = undefined;
+        }
+    } else {
+        // Not manually allocating, but check if we have context (like Project ID from props)
+        // This ensures creating a new log via "Add Time" on Project Manager correctly links the data
+        if (activeProjectId) {
+             updates.projectId = activeProjectId;
+             updates.milestoneId = session?.milestoneId || initialData?.milestoneId;
+
+             const proj = projects?.find(p => p.id === activeProjectId);
+             const mile = proj?.milestones.find(m => m.id === updates.milestoneId);
+
+             if (proj) {
+                 updates.clientId = proj.clientId;
+                 let contextHeader = proj.title;
+                 if (mile) contextHeader += ` - ${mile.title}`;
+
+                 updates.customTitle = contextHeader;
+
+                 // Format notes as requested: [Project] - [Milestone]: [User Input]
+                 // Only apply this formatting on creation to avoid overwriting existing edits
+                 if (mode === 'create') {
+                     if (notes.trim()) {
+                         updates.notes = `${contextHeader}: ${notes}`;
+                     } else {
+                         updates.notes = contextHeader;
+                     }
+                 }
+             }
+        }
+        // Preserve Task ID if present in context
+        if (activeTaskId) {
+            updates.taskId = activeTaskId;
         }
     }
 
-    if ((mode === 'edit' || mode === 'create') && session) {
+    if ((mode === 'edit' || mode === 'create')) {
       // Parse times
-      const date = new Date(session.startTime);
+      const baseTime = session?.startTime || Date.now();
+      const date = new Date(baseTime);
       const year = date.getFullYear();
       const month = date.getMonth();
       const day = date.getDate();
 
-      let newStart = session.startTime;
-      let newEnd = session.endTime || Date.now();
+      let newStart = session?.startTime || Date.now();
+      let newEnd = session?.endTime || Date.now();
 
       if (startTime) {
         const [h, m] = startTime.split(':').map(Number);
@@ -138,7 +214,23 @@ const SessionModal: React.FC<SessionModalProps> = ({
   };
 
   const activeTaskId = session?.taskId || initialData?.taskId;
-  const taskTitle = tasks.find(t => t.id === activeTaskId)?.title || session?.customTitle || 'Unallocated Activity';
+  const activeProjectId = session?.projectId || initialData?.projectId;
+  
+  let taskTitle = 'Unallocated Activity';
+  if (activeTaskId) {
+      taskTitle = tasks.find(t => t.id === activeTaskId)?.title || 'Unknown Task';
+  } else if (activeProjectId) {
+      const p = projects.find(pr => pr.id === activeProjectId);
+      taskTitle = p ? `Project: ${p.title}` : 'Unknown Project';
+      if (session?.milestoneId || initialData?.milestoneId) {
+          const m = p?.milestones.find(mi => mi.id === (session?.milestoneId || initialData?.milestoneId));
+          if (m) taskTitle += ` (${m.title})`;
+      }
+  } else if (session?.customTitle) {
+      taskTitle = session.customTitle;
+  }
+
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -163,7 +255,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
 
           {!isAllocating ? (
             <div className="bg-slate-700/30 p-3 rounded-lg border border-slate-700">
-                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Task</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Activity Context</p>
                 <p className="text-white font-medium truncate">{taskTitle}</p>
             </div>
           ) : (
@@ -180,7 +272,15 @@ const SessionModal: React.FC<SessionModalProps> = ({
                             allocType === 'task' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                         }`}
                     >
-                        <CheckSquare size={14} /> Existing Task
+                        <CheckSquare size={14} /> Task
+                    </button>
+                    <button
+                        onClick={() => setAllocType('project')}
+                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-medium transition-all ${
+                            allocType === 'project' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                        }`}
+                    >
+                        <FolderKanban size={14} /> Project
                     </button>
                     <button
                         onClick={() => setAllocType('quick')}
@@ -188,11 +288,11 @@ const SessionModal: React.FC<SessionModalProps> = ({
                             allocType === 'quick' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                         }`}
                     >
-                        <Zap size={14} /> Quick Entry
+                        <Zap size={14} /> Quick
                     </button>
                 </div>
 
-                {allocType === 'task' ? (
+                {allocType === 'task' && (
                      <div>
                         <select
                             value={selectedTaskId}
@@ -205,7 +305,40 @@ const SessionModal: React.FC<SessionModalProps> = ({
                             ))}
                         </select>
                      </div>
-                ) : (
+                )}
+
+                {allocType === 'project' && (
+                     <div className="space-y-2">
+                        <select
+                            value={selectedProjectId}
+                            onChange={(e) => {
+                                setSelectedProjectId(e.target.value);
+                                setSelectedMilestoneId('');
+                            }}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                        >
+                            <option value="">-- Select Project --</option>
+                            {projects.map(p => (
+                                <option key={p.id} value={p.id}>{p.title}</option>
+                            ))}
+                        </select>
+                        
+                        {selectedProject && (
+                            <select
+                                value={selectedMilestoneId}
+                                onChange={(e) => setSelectedMilestoneId(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                            >
+                                <option value="">-- Select Milestone (Optional) --</option>
+                                {selectedProject.milestones.map(m => (
+                                    <option key={m.id} value={m.id}>{m.title} {m.isCompleted ? '(Done)' : ''}</option>
+                                ))}
+                            </select>
+                        )}
+                     </div>
+                )}
+
+                {allocType === 'quick' && (
                     <div className="space-y-2">
                         <select
                             value={quickClientId}

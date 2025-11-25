@@ -11,9 +11,10 @@ import TaskPreviewModal from './components/TaskPreviewModal';
 import SearchModal from './components/SearchModal';
 import FocusMode from './components/FocusMode';
 import ReportGenerator from './components/ReportGenerator';
+import ProjectManager from './components/ProjectManager';
 import LandingPage from './components/LandingPage';
 import TutorialOverlay, { TutorialStep } from './components/TutorialOverlay';
-import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActivity, RecurringActivity } from './types';
+import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActivity, RecurringActivity, Project, ProjectTemplate } from './types';
 
 // Simple ID generator since we can't import uuid
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -26,6 +27,9 @@ const App: React.FC = () => {
     { id: '1', name: 'TechCorp', color: '#6366f1' },
     { id: '2', name: 'DesignStudio', color: '#ec4899' },
   ]);
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [customTemplates, setCustomTemplates] = useState<ProjectTemplate[]>([]);
 
   const [tasks, setTasks] = useState<Task[]>([
     { id: 't1', clientId: '1', title: 'Server Migration', description: 'Migrate legacy Ubuntu server to AWS', status: 'in-progress', totalTime: 3600, createdAt: Date.now() },
@@ -60,6 +64,9 @@ const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  
+  // Project Log State to initialize Modal
+  const [projectLogInit, setProjectLogInit] = useState<{projectId: string, milestoneId?: string} | undefined>(undefined);
 
   // Constants
   const SIX_MINUTES_MS = 6 * 60 * 1000;
@@ -86,6 +93,10 @@ const App: React.FC = () => {
     if (storedRecurring) setRecurringActivities(JSON.parse(storedRecurring));
     const storedClients = localStorage.getItem('clients');
     if (storedClients) setClients(JSON.parse(storedClients));
+    const storedProjects = localStorage.getItem('projects');
+    if (storedProjects) setProjects(JSON.parse(storedProjects));
+    const storedTemplates = localStorage.getItem('customTemplates');
+    if (storedTemplates) setCustomTemplates(JSON.parse(storedTemplates));
   }, []);
 
   useEffect(() => {
@@ -100,7 +111,9 @@ const App: React.FC = () => {
     localStorage.setItem('plannedActivities', JSON.stringify(plannedActivities));
     localStorage.setItem('recurringActivities', JSON.stringify(recurringActivities));
     localStorage.setItem('clients', JSON.stringify(clients));
-  }, [sessions, tasks, subtasks, plannedActivities, recurringActivities, clients]);
+    localStorage.setItem('projects', JSON.stringify(projects));
+    localStorage.setItem('customTemplates', JSON.stringify(customTemplates));
+  }, [sessions, tasks, subtasks, plannedActivities, recurringActivities, clients, projects, customTemplates]);
 
   // --- Tutorial Steps Definition ---
   const tutorialSteps: TutorialStep[] = [
@@ -109,6 +122,12 @@ const App: React.FC = () => {
         title: 'Command Center',
         description: 'Your Dashboard gives you an instant overview of your 7.6h daily goal, recent activity, and client breakdown.',
         view: ViewMode.DASHBOARD
+    },
+    {
+        targetId: 'nav-projects',
+        title: 'Project Management',
+        description: 'Plan large initiatives, track milestones, and use the AI Architect to build roadmaps and risk assessments instantly.',
+        view: ViewMode.PROJECTS
     },
     {
         targetId: 'nav-clients',
@@ -138,7 +157,7 @@ const App: React.FC = () => {
         targetId: 'nav-focus',
         title: 'Focus Mode',
         description: 'Enter a distraction-free zone that shows only your active timer and current objective.',
-        view: ViewMode.DASHBOARD // We point to the button in sidebar
+        view: ViewMode.DASHBOARD 
     }
   ];
 
@@ -146,7 +165,7 @@ const App: React.FC = () => {
     setShowLanding(false);
     setShowTutorial(true);
     setTutorialStep(0);
-    setView(ViewMode.DASHBOARD); // Start at dashboard
+    setView(ViewMode.DASHBOARD); 
   };
 
   const handleNextTutorialStep = () => {
@@ -170,6 +189,8 @@ const App: React.FC = () => {
     setSessions([]);
     setPlannedActivities([]);
     setRecurringActivities([]);
+    setProjects([]);
+    setCustomTemplates([]);
     
     // Reset view
     setView(ViewMode.DASHBOARD);
@@ -187,6 +208,30 @@ const App: React.FC = () => {
 
   const deleteClient = (id: string) => {
     setClients(clients.filter(c => c.id !== id));
+  };
+
+  // Project Actions
+  const addProject = (project: Project) => {
+    setProjects(prev => [...prev, project]);
+  };
+  
+  const updateProject = (updatedProject: Project) => {
+    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+  };
+
+  const deleteProject = (id: string) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+  };
+
+  const saveTemplate = (template: ProjectTemplate) => {
+    setCustomTemplates(prev => [...prev, template]);
+  };
+  
+  const handleLogProjectTime = (projectId: string, milestoneId?: string) => {
+     setProjectLogInit({ projectId, milestoneId });
+     setModalMode('create');
+     setEditingSession(null);
+     setModalOpen(true);
   };
 
   const addTask = (taskData: Omit<Task, 'id' | 'createdAt' | 'totalTime' | 'status'>) => {
@@ -239,19 +284,14 @@ const App: React.FC = () => {
   };
 
   const startTimer = (taskId?: string, subtaskId?: string, startTimeOverride?: number) => {
-    // If a timer is running, we need to stop it first
     if (activeTimer) {
-      // Prevent restarting the exact same task if just clicked again
       if (activeTimer.taskId === taskId && activeTimer.subtaskId === subtaskId) return;
       
-      // If we are switching, queue the next start
-      // Note: taskId can be undefined for quick start, which is valid
       setPendingTimerStart({ taskId, subtaskId });
       stopTimerRequest(activeTimer);
     } else {
       const lastSessionEndTime = sessions.reduce((max, s) => Math.max(max, s.endTime || 0), 0);
       const now = Date.now();
-      // Use override if provided, otherwise max of now/last session
       const startTime = startTimeOverride || Math.max(now, lastSessionEndTime);
 
       setActiveTimer({
@@ -266,7 +306,6 @@ const App: React.FC = () => {
     if (activeTimer) stopTimerRequest(activeTimer);
   };
 
-  // NEW: Cancel Active Timer directly
   const cancelActiveTimer = () => {
     setActiveTimer(null);
   };
@@ -285,8 +324,6 @@ const App: React.FC = () => {
 
   const handleStopConfirm = (_id: string | null, updates: Partial<TimerSession>) => {
     if (timerToStop) {
-      // Include updates like taskId/clientId/customTitle if the timer was unallocated
-      // The updates object comes from SessionModal onSave
       finalizeSession(timerToStop, updates.notes || '', Date.now(), updates);
       setTimerToStop(null);
     }
@@ -308,12 +345,11 @@ const App: React.FC = () => {
       endTime: roundedEndTime,
       notes,
       isManualLog: false,
-      ...extraUpdates // Merges taskId/clientId/customTitle if allocated during stop
+      ...extraUpdates 
     };
     
     setSessions(prev => [...prev, newSession]);
 
-    // Only update total time if allocated to a task
     if (newSession.subtaskId) {
       setSubtasks(prev => prev.map(s => 
         s.id === newSession.subtaskId ? { ...s, totalTime: s.totalTime + durationInSeconds } : s
@@ -326,7 +362,6 @@ const App: React.FC = () => {
 
     setActiveTimer(null);
 
-    // Explicitly check for non-null pendingTimerStart to avoid issues with falsy values if taskId is undefined
     if (pendingTimerStart) {
       setActiveTimer({
         taskId: pendingTimerStart.taskId,
@@ -357,7 +392,6 @@ const App: React.FC = () => {
   };
 
   const handleSessionSave = (sessionId: string | null, updates: Partial<TimerSession>) => {
-    // Handle 'log-plan' mode specially
     if (modalMode === 'log-plan' && pendingPlanLogId) {
         completeLogPlan(pendingPlanLogId, updates.notes || '');
         setPendingPlanLogId(null);
@@ -369,20 +403,18 @@ const App: React.FC = () => {
         return;
     }
 
-    // Handle Create New Session (Manual Entry)
     if (modalMode === 'create') {
         const newSession: TimerSession = {
             id: generateId(),
-            startTime: Date.now(), // Fallback
-            endTime: Date.now(), // Fallback
+            startTime: Date.now(), 
+            endTime: Date.now(), 
             isManualLog: true,
-            ...editingSession, // Base defaults
-            ...updates // User inputs
+            ...editingSession, 
+            ...updates 
         };
         
         setSessions(prev => [...prev, newSession]);
         
-        // Update task times if allocated
         if (newSession.endTime && newSession.startTime) {
              const duration = (newSession.endTime - newSession.startTime) / 1000;
              if (newSession.taskId) {
@@ -392,27 +424,22 @@ const App: React.FC = () => {
         return;
     }
 
-    // Handle Edit Existing
     if (!sessionId) return;
     
     const oldSession = sessions.find(s => s.id === sessionId);
     if (!oldSession) return;
 
     let durationDiff = 0;
-    // Calculate new duration
     const newStart = updates.startTime !== undefined ? updates.startTime : oldSession.startTime;
     const newEnd = updates.endTime !== undefined ? updates.endTime : (oldSession.endTime || Date.now());
     const newDuration = newEnd - newStart;
     
-    // Calculate old duration
     const oldDuration = (oldSession.endTime || Date.now()) - oldSession.startTime;
     
     durationDiff = Math.floor((newDuration - oldDuration) / 1000);
 
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, ...updates } : s));
 
-    // Handle time updates
-    // Scenario 1: Task ID didn't change, just duration
     if ((!updates.taskId || updates.taskId === oldSession.taskId) && oldSession.taskId) {
         if (durationDiff !== 0) {
             if (oldSession.subtaskId) {
@@ -422,17 +449,14 @@ const App: React.FC = () => {
             }
         }
     } 
-    // Scenario 2: Allocation Changed (e.g. was Quick/None, now Task) or Task Swapped
     else if (updates.taskId !== undefined && updates.taskId !== oldSession.taskId) {
          const newSec = Math.floor(newDuration / 1000);
          const oldSec = Math.floor(oldDuration / 1000);
 
-         // Remove time from old task if it existed
          if (oldSession.taskId) {
              setTasks(prev => prev.map(t => t.id === oldSession.taskId ? { ...t, totalTime: Math.max(0, t.totalTime - oldSec) } : t));
          }
          
-         // Add time to new task
          if (updates.taskId) {
              setTasks(prev => prev.map(t => t.id === updates.taskId ? { ...t, totalTime: t.totalTime + newSec } : t));
          }
@@ -443,7 +467,6 @@ const App: React.FC = () => {
     const sessionToDelete = sessions.find(s => s.id === sessionId);
     if (!sessionToDelete) return;
 
-    // 1. Update Totals (Reverse what finalizeSession/handleEditConfirm did)
     if (sessionToDelete.endTime) {
         const durationSec = (sessionToDelete.endTime - sessionToDelete.startTime) / 1000;
         
@@ -462,8 +485,6 @@ const App: React.FC = () => {
         }
     }
 
-    // 2. Un-log matched Plan if exists
-    // We match roughly by startTime (since it's usually exact) and ensuring it was logged
     setPlannedActivities(prev => prev.map(p => {
         if (p.isLogged && Math.abs(p.startTime - sessionToDelete.startTime) < 1000) {
              return { ...p, isLogged: false };
@@ -471,7 +492,6 @@ const App: React.FC = () => {
         return p;
     }));
 
-    // 3. Remove Session
     setSessions(prev => prev.filter(s => s.id !== sessionId));
     setModalOpen(false);
   };
@@ -490,7 +510,6 @@ const App: React.FC = () => {
 
   const handleSavePlan = (data: any) => {
     if (editingPlan) {
-        // We are updating an existing or ghost plan
         const d = new Date(data.startTime);
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -498,7 +517,6 @@ const App: React.FC = () => {
         const dateKey = `${year}-${month}-${day}`;
 
         if (editingPlan.id.startsWith('ghost_')) {
-             // Materialize ghost with updates
              const newPlan: PlannedActivity = {
                 id: generateId(),
                 date: dateKey,
@@ -513,7 +531,6 @@ const App: React.FC = () => {
              };
              setPlannedActivities(prev => [...prev, newPlan]);
         } else {
-             // Update existing plan
              setPlannedActivities(prev => prev.map(p => p.id === editingPlan.id ? {
                 ...p,
                 date: dateKey,
@@ -527,14 +544,12 @@ const App: React.FC = () => {
         }
         setEditingPlan(null);
     } else if (data.isRecurring && data.recurringRule) {
-        // Saving a recurring rule
         const newRule: RecurringActivity = {
             id: generateId(),
             ...data.recurringRule
         };
         setRecurringActivities(prev => [...prev, newRule]);
     } else {
-        // Saving a single planned activity
         const d = new Date(data.startTime);
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -585,14 +600,11 @@ const App: React.FC = () => {
   };
 
   const handleTogglePlanLog = (planId: string) => {
-    // Check if this is a "Ghost" ID from the Timeline (recurring item not yet instantiated)
     if (planId.startsWith('ghost_')) {
-        // Format: ghost_RULEID_DATEKEY
         const [_, ruleId, dateKey] = planId.split('_');
         const rule = recurringActivities.find(r => r.id === ruleId);
         if (!rule) return;
 
-        // Instantiate this ghost as a real planned activity first
         const [year, month, day] = dateKey.split('-').map(Number);
         const [h, m] = rule.startTimeStr.split(':').map(Number);
         const startTime = new Date(year, month - 1, day, h, m).getTime();
@@ -611,8 +623,6 @@ const App: React.FC = () => {
         };
 
         setPlannedActivities(prev => [...prev, newPlan]);
-        
-        // Immediately trigger the log flow for this new ID
         createSessionFromPlan(newPlan);
         return;
     }
@@ -636,18 +646,15 @@ const App: React.FC = () => {
   };
 
   const createSessionFromPlan = (plan: PlannedActivity) => {
-     // Mark plan as logged
      setPlannedActivities(prev => prev.map(p => p.id === plan.id ? { ...p, isLogged: true } : p));
      
      if (plan.type === 'task') {
-        // For tasks, we still want to show the modal to enter notes
         setPendingPlanLogId(plan.id);
         setModalMode('log-plan');
         setEditingSession(null);
         setTimerToStop({ taskId: plan.taskId!, startTime: plan.startTime });
         setModalOpen(true);
      } else {
-        // Quick entry, just log it
         const durationMs = plan.durationMinutes * 60 * 1000;
         let blocks = Math.ceil(durationMs / SIX_MINUTES_MS);
         if (blocks < 1) blocks = 1;
@@ -756,6 +763,20 @@ const App: React.FC = () => {
                />
              )}
              
+             {view === ViewMode.PROJECTS && (
+               <ProjectManager
+                 projects={projects}
+                 clients={clients}
+                 sessions={sessions}
+                 customTemplates={customTemplates}
+                 onAddProject={addProject}
+                 onUpdateProject={updateProject}
+                 onDeleteProject={deleteProject}
+                 onSaveTemplate={saveTemplate}
+                 onLogTime={handleLogProjectTime}
+               />
+             )}
+
              {view === ViewMode.TASKS && (
                <TaskBoard
                  tasks={tasks}
@@ -833,14 +854,16 @@ const App: React.FC = () => {
            setModalOpen(false);
            setPendingTimerStart(null);
            setPendingPlanLogId(null);
+           setProjectLogInit(undefined);
         }}
         onSave={handleSessionSave}
         onDelete={handleDeleteSession}
         mode={modalMode === 'log-plan' ? 'stop' : modalMode} 
         session={editingSession}
-        initialData={timerToStop ? { taskId: timerToStop.taskId, subtaskId: timerToStop.subtaskId } : undefined}
+        initialData={timerToStop ? { taskId: timerToStop.taskId, subtaskId: timerToStop.subtaskId } : projectLogInit ? { projectId: projectLogInit.projectId, milestoneId: projectLogInit.milestoneId } : undefined}
         tasks={tasks}
         clients={clients}
+        projects={projects}
       />
 
       <PlanModal 

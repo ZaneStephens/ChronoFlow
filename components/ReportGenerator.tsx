@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Client, Task, TimerSession, Subtask } from '../types';
 import { generateClientReport, generateTaskReport } from '../services/geminiService';
@@ -95,7 +94,9 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ clients, tasks, sessi
             task.status,
             totalHours,
             relevantSubtasks,
-            workLogs
+            workLogs,
+            client.name,
+            client.isInternal || false
         );
         setGeneratedReport(report || "No report generated.");
       }
@@ -162,7 +163,8 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ clients, tasks, sessi
         client.name,
         new Date(startDate).toLocaleDateString(),
         new Date(endDate).toLocaleDateString(),
-        reportItems
+        reportItems,
+        client.isInternal || false
       );
       setGeneratedReport(report || "No response generated.");
     }
