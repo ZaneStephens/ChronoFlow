@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Task, Subtask, Client, ActiveTimer } from '../types';
-import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye, Pencil, Save, X, Briefcase } from 'lucide-react';
+import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye, Pencil, Save, X, Briefcase, Link as LinkIcon } from 'lucide-react';
 import { generateSubtasks } from '../services/geminiService';
 
 interface TaskBoardProps {
@@ -11,7 +11,7 @@ interface TaskBoardProps {
   onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'totalTime' | 'status'>) => void;
   onUpdateTask: (task: Task) => void;
   onUpdateSubtask: (subtaskId: string, title: string) => void;
-  onAddSubtasks: (taskId: string, subtasks: { title: string }[]) => void;
+  onAddSubtasks: (taskId: string, subtasks: { title: string; link?: string }[]) => void;
   onDeleteTask: (taskId: string) => void;
   onDeleteSubtask: (subtaskId: string) => void;
   onUpdateTaskStatus: (taskId: string, status: Task['status']) => void;
@@ -40,6 +40,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [isAiLoading, setIsAiLoading] = useState<string | null>(null); // taskId being processed
   const [manualSubtaskInputs, setManualSubtaskInputs] = useState<{[key: string]: string}>({});
+  const [manualSubtaskLinks, setManualSubtaskLinks] = useState<{[key: string]: string}>({});
+  const [showSubtaskLinkInput, setShowSubtaskLinkInput] = useState<{[key: string]: boolean}>({});
   const [showCompleted, setShowCompleted] = useState(false);
   
   // New Task Form State
@@ -47,11 +49,12 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskClient, setNewTaskClient] = useState('');
   const [newTaskTicket, setNewTaskTicket] = useState('');
+  const [newTaskLink, setNewTaskLink] = useState('');
 
   // Editing Task State
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editTaskData, setEditTaskData] = useState<{title: string, description: string, clientId: string, ticketNumber: string}>({
-      title: '', description: '', clientId: '', ticketNumber: ''
+  const [editTaskData, setEditTaskData] = useState<{title: string, description: string, clientId: string, ticketNumber: string, link: string}>({
+      title: '', description: '', clientId: '', ticketNumber: '', link: ''
   });
 
   // Editing Subtask State
@@ -102,12 +105,24 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     setManualSubtaskInputs(prev => ({...prev, [taskId]: value}));
   };
 
+  const handleManualSubtaskLinkChange = (taskId: string, value: string) => {
+    setManualSubtaskLinks(prev => ({...prev, [taskId]: value}));
+  };
+
+  const toggleSubtaskLinkInput = (taskId: string) => {
+    setShowSubtaskLinkInput(prev => ({...prev, [taskId]: !prev[taskId]}));
+  };
+
   const handleAddManualSubtask = (taskId: string) => {
     const title = manualSubtaskInputs[taskId];
     if (!title?.trim()) return;
     
-    onAddSubtasks(taskId, [{ title }]);
+    const link = manualSubtaskLinks[taskId];
+
+    onAddSubtasks(taskId, [{ title, link }]);
     setManualSubtaskInputs(prev => ({...prev, [taskId]: ''}));
+    setManualSubtaskLinks(prev => ({...prev, [taskId]: ''}));
+    setShowSubtaskLinkInput(prev => ({...prev, [taskId]: false}));
   };
 
   const handleGenerateSubtasks = async (task: Task, mode: 'technical' | 'csm') => {
@@ -136,11 +151,13 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
       title: newTaskTitle,
       description: newTaskDesc,
       clientId: newTaskClient,
-      ticketNumber: newTaskTicket
+      ticketNumber: newTaskTicket,
+      link: newTaskLink
     });
     setNewTaskTitle('');
     setNewTaskDesc('');
     setNewTaskTicket('');
+    setNewTaskLink('');
   };
 
   // --- Edit Task Logic ---
@@ -150,7 +167,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
           title: task.title,
           description: task.description || '',
           clientId: task.clientId,
-          ticketNumber: task.ticketNumber || ''
+          ticketNumber: task.ticketNumber || '',
+          link: task.link || ''
       });
   };
 
@@ -166,7 +184,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
           title: editTaskData.title,
           description: editTaskData.description,
           clientId: editTaskData.clientId,
-          ticketNumber: editTaskData.ticketNumber
+          ticketNumber: editTaskData.ticketNumber,
+          link: editTaskData.link
       });
       setEditingTaskId(null);
   };
@@ -291,39 +310,50 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
               className="md:w-32 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
         </div>
+        
         <div className="flex flex-col md:flex-row gap-2 items-end">
-           <input
-            type="text"
-            placeholder="Description (optional)"
-            value={newTaskDesc}
-            onChange={(e) => setNewTaskDesc(e.target.value)}
-            className="flex-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <div className="flex gap-2 w-full md:w-auto">
-            <select
-              value={newTaskClient}
-              onChange={(e) => setNewTaskClient(e.target.value)}
-              className="flex-1 md:w-48 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">Select Client...</option>
-              {topClients.length > 0 && (
-                <optgroup label="Frequently Used">
-                  {topClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <div className="flex-1 w-full flex flex-col gap-2">
+                <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={newTaskDesc}
+                    onChange={(e) => setNewTaskDesc(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                 <input
+                    type="text"
+                    placeholder="Link URL (Optional)"
+                    value={newTaskLink}
+                    onChange={(e) => setNewTaskLink(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+            </div>
+            
+            <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
+                <select
+                value={newTaskClient}
+                onChange={(e) => setNewTaskClient(e.target.value)}
+                className="flex-1 md:w-48 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 h-[42px]"
+                >
+                <option value="">Select Client...</option>
+                {topClients.length > 0 && (
+                    <optgroup label="Frequently Used">
+                    {topClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </optgroup>
+                )}
+                <optgroup label="All Clients">
+                    {otherClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </optgroup>
-              )}
-              <optgroup label="All Clients">
-                  {otherClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </optgroup>
-            </select>
-            <button
-              disabled={!newTaskTitle || !newTaskClient}
-              type="submit"
-              className="h-10 px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center space-x-2 whitespace-nowrap"
-            >
-              <Plus size={18} />
-              <span>Add Task</span>
-            </button>
-          </div>
+                </select>
+                <button
+                disabled={!newTaskTitle || !newTaskClient}
+                type="submit"
+                className="h-[42px] px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center space-x-2 whitespace-nowrap"
+                >
+                <Plus size={18} />
+                <span>Add Task</span>
+                </button>
+            </div>
         </div>
       </form>
 
@@ -405,6 +435,13 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                              className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 h-20"
                              placeholder="Description"
                            />
+                           <input 
+                             type="text" 
+                             value={editTaskData.link}
+                             onChange={(e) => setEditTaskData({...editTaskData, link: e.target.value})}
+                             className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                             placeholder="Link URL"
+                           />
                            <div className="flex gap-2 justify-end">
                                 <button onClick={() => saveEditTask(task.id)} className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm transition-colors">
                                     <Save size={14} /> Save
@@ -457,6 +494,18 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
 
                 {!isEditing && (
                     <div className="flex items-center gap-2 shrink-0 self-start mt-1">
+                    {task.link && (
+                        <a 
+                            href={task.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 rounded-full bg-slate-700 text-slate-300 hover:bg-indigo-600 hover:text-white transition-colors"
+                            title="Open Link"
+                        >
+                            <LinkIcon size={18} />
+                        </a>
+                    )}
+
                     <button
                         onClick={() => isActive ? onStopTimer() : onStartTimer(task.id)}
                         className={`p-2 rounded-full transition-all ${
@@ -582,6 +631,19 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                   </button>
                                 </>
                             )}
+                            
+                            {subtask.link && (
+                                <a 
+                                    href={subtask.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-full bg-slate-700/50 text-slate-400 hover:bg-indigo-500 hover:text-white transition-colors flex items-center justify-center"
+                                    title="Open Link"
+                                    style={{ width: 28, height: 28 }}
+                                >
+                                    <LinkIcon size={14} />
+                                </a>
+                            )}
 
                             <button
                               onClick={() => isSubActive ? onStopTimer() : onStartTimer(task.id, subtask.id)}
@@ -590,6 +652,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                   ? 'text-indigo-400 bg-indigo-500/10' 
                                   : 'text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100'
                               }`}
+                              style={{ width: 28, height: 28 }}
                               disabled={isDone || isSubEditing}
                             >
                               {isSubActive ? <PauseIcon size={14} /> : <Play size={14} fill="currentColor" />}
@@ -602,21 +665,42 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                   
                   {/* Manual Subtask Add */}
                   {!isDone && (
-                    <div className="mt-4 flex gap-2">
-                       <input 
-                         type="text" 
-                         placeholder="Add subtask manually..."
-                         className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                         value={manualSubtaskInputs[task.id] || ''}
-                         onChange={(e) => handleManualSubtaskChange(task.id, e.target.value)}
-                         onKeyDown={(e) => e.key === 'Enter' && handleAddManualSubtask(task.id)}
-                       />
-                       <button 
-                         onClick={() => handleAddManualSubtask(task.id)}
-                         className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-sm transition-colors"
-                       >
-                         Add
-                       </button>
+                    <div className="mt-4 space-y-2">
+                       <div className="flex gap-2 items-center">
+                           <input 
+                             type="text" 
+                             placeholder="Add subtask manually..."
+                             className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                             value={manualSubtaskInputs[task.id] || ''}
+                             onChange={(e) => handleManualSubtaskChange(task.id, e.target.value)}
+                             onKeyDown={(e) => e.key === 'Enter' && handleAddManualSubtask(task.id)}
+                           />
+                            <button
+                                type="button"
+                                onClick={() => toggleSubtaskLinkInput(task.id)}
+                                className={`p-1.5 rounded transition-colors ${showSubtaskLinkInput[task.id] ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-white'}`}
+                                title="Add Link"
+                            >
+                                <LinkIcon size={16} />
+                            </button>
+                           <button 
+                             onClick={() => handleAddManualSubtask(task.id)}
+                             className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors"
+                           >
+                             Add
+                           </button>
+                       </div>
+                       
+                       {showSubtaskLinkInput[task.id] && (
+                           <input 
+                                type="text" 
+                                placeholder="Link URL (Optional)"
+                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 animate-in slide-in-from-top-1 fade-in duration-200"
+                                value={manualSubtaskLinks[task.id] || ''}
+                                onChange={(e) => handleManualSubtaskLinkChange(task.id, e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddManualSubtask(task.id)}
+                           />
+                       )}
                     </div>
                   )}
 

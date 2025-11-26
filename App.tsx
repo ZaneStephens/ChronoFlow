@@ -278,13 +278,14 @@ const App: React.FC = () => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
   };
 
-  const addSubtasks = (taskId: string, newSubtasks: { title: string }[]) => {
+  const addSubtasks = (taskId: string, newSubtasks: { title: string; link?: string }[]) => {
     const subtaskObjects: Subtask[] = newSubtasks.map(st => ({
       id: generateId(),
       taskId,
       title: st.title,
       isCompleted: false,
-      totalTime: 0
+      totalTime: 0,
+      link: st.link
     }));
     setSubtasks([...subtasks, ...subtaskObjects]);
   };

@@ -16,6 +16,7 @@ export interface Subtask {
   title: string;
   isCompleted: boolean;
   totalTime: number; // in seconds
+  link?: string;
 }
 
 export interface Task {
@@ -28,6 +29,7 @@ export interface Task {
   status: 'todo' | 'in-progress' | 'done';
   totalTime: number; // in seconds
   createdAt: number;
+  link?: string;
 }
 
 export interface TimerSession {
