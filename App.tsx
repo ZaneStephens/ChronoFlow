@@ -744,6 +744,100 @@ const App: React.FC = () => {
     setPlannedActivities(prev => prev.filter(p => p.id !== id));
   };
 
+  // --- Export / Import Handlers ---
+
+  const handleExportData = () => {
+    const data = {
+        version: 1,
+        timestamp: Date.now(),
+        clients,
+        projects,
+        customTemplates,
+        rocks,
+        tasks,
+        subtasks,
+        sessions,
+        plannedActivities,
+        recurringActivities,
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chronoflow_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const content = e.target?.result as string;
+            const data = JSON.parse(content);
+            
+            // Basic validation
+            if (!data.clients || !Array.isArray(data.clients)) {
+                alert("Invalid data format: Missing clients array.");
+                return;
+            }
+
+            // Confirm strategy
+            const useMerge = window.confirm(
+                "Import Strategy:\n\n" +
+                "OK = MERGE (Update existing items, add new ones)\n" +
+                "Cancel = OVERWRITE (Replace all current data with this file)\n\n" +
+                "Choose wisely!"
+            );
+
+            if (useMerge) {
+                // Merge Helper
+                const merge = <T extends { id: string }>(current: T[], imported: T[] = []) => {
+                    const map = new Map(current.map(i => [i.id, i]));
+                    imported.forEach(i => map.set(i.id, i));
+                    return Array.from(map.values());
+                };
+
+                setClients(prev => merge(prev, data.clients));
+                setProjects(prev => merge(prev, data.projects));
+                setCustomTemplates(prev => merge(prev, data.customTemplates));
+                setRocks(prev => merge(prev, data.rocks));
+                setTasks(prev => merge(prev, data.tasks));
+                setSubtasks(prev => merge(prev, data.subtasks));
+                setSessions(prev => merge(prev, data.sessions));
+                setPlannedActivities(prev => merge(prev, data.plannedActivities));
+                setRecurringActivities(prev => merge(prev, data.recurringActivities));
+                
+                alert("Import successful: Data merged.");
+            } else {
+                // Overwrite
+                if (window.confirm("WARNING: This will DELETE all current data and replace it with the imported file. Are you absolutely sure?")) {
+                    setClients(data.clients || []);
+                    setProjects(data.projects || []);
+                    setCustomTemplates(data.customTemplates || []);
+                    setRocks(data.rocks || []);
+                    setTasks(data.tasks || []);
+                    setSubtasks(data.subtasks || []);
+                    setSessions(data.sessions || []);
+                    setPlannedActivities(data.plannedActivities || []);
+                    setRecurringActivities(data.recurringActivities || []);
+                    setActiveTimer(null); // Safety clear
+                    
+                    alert("Import successful: Data overwritten.");
+                }
+            }
+
+        } catch (error) {
+            console.error(error);
+            alert("Failed to parse the file. Please ensure it is a valid JSON export.");
+        }
+    };
+    reader.readAsText(file);
+  };
+
   // --- Render ---
 
   if (showLanding) {
@@ -765,6 +859,8 @@ const App: React.FC = () => {
         currentView={view} 
         setView={setView} 
         onSearchClick={() => setSearchOpen(true)}
+        onExport={handleExportData}
+        onImport={handleImportData}
       />
       
       <main className="flex-1 md:ml-64 relative overflow-y-auto h-full scroll-smooth">

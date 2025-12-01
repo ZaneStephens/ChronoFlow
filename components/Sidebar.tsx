@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { ViewMode } from '../types';
-import { LayoutDashboard, CheckSquare, Users, PieChart, Zap, CalendarClock, Search, Disc, FolderKanban, Mountain } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, Users, PieChart, Zap, CalendarClock, Search, Disc, FolderKanban, Mountain, Download, Upload } from 'lucide-react';
 
 interface SidebarProps {
   currentView: ViewMode;
   setView: (view: ViewMode) => void;
   onSearchClick: () => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick, onExport, onImport }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const navItems = [
     { id: ViewMode.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard, domId: 'nav-dashboard' },
     { id: ViewMode.TIMELINE, label: 'Day Timeline', icon: CalendarClock, domId: 'nav-timeline' },
@@ -18,6 +22,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick }
     { id: ViewMode.CLIENTS, label: 'Clients', icon: Users, domId: 'nav-clients' },
     { id: ViewMode.REPORTS, label: 'Analytics', icon: PieChart, domId: 'nav-reports' },
   ];
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      onImport(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <aside id="sidebar" className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full fixed left-0 top-0 z-20 hidden md:flex">
@@ -74,6 +88,31 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick }
       </nav>
 
       <div className="p-6 border-t border-slate-800 space-y-4">
+        {/* Data Management Buttons */}
+        <div className="grid grid-cols-2 gap-2">
+            <button 
+                onClick={onExport}
+                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-3 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+                title="Export all data to JSON"
+            >
+                <Download size={14} /> Export
+            </button>
+            <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-3 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+                title="Import data from JSON"
+            >
+                <Upload size={14} /> Import
+            </button>
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+                accept=".json"
+            />
+        </div>
+
         <button 
           onClick={onSearchClick}
           className="w-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-4 rounded-lg flex items-center gap-2 transition-colors text-sm border border-slate-700"
