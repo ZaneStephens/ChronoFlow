@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Task, Client, RecurringActivity, RecurrenceFrequency, PlannedActivity } from '../types';
-import { X, CalendarPlus, Zap, CheckSquare, Repeat, Trash2, CalendarDays, Edit2 } from 'lucide-react';
+import { X, CalendarPlus, Zap, CheckSquare, Repeat, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PlanModalProps {
   isOpen: boolean;
@@ -17,6 +17,7 @@ interface PlanModalProps {
 
 const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDeleteRule, tasks, clients, recurringActivities = [], initialTime, initialDuration, editingPlan }) => {
   const [tab, setTab] = useState<'one-off' | 'recurring'>('one-off');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   // Shared
   const [type, setType] = useState<'task' | 'quick'>('task');
@@ -188,53 +189,62 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col md:flex-row h-[600px] md:h-auto">
+      <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col md:flex-row h-[650px] md:h-[600px]">
         
-        {/* Sidebar for Recurring Rules List (Only visible when Recurring Tab selected or on larger screens?) 
-           Let's make it always visible on desktop, acting as "Active Rules" manager 
-        */}
-        <div className="w-full md:w-64 bg-slate-900/50 border-r border-slate-700 p-4 overflow-y-auto hidden md:block">
-            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Active Rules</h4>
-            <div className="space-y-3">
-                {recurringActivities.map(rule => {
-                    const task = rule.taskId ? tasks.find(t => t.id === rule.taskId) : null;
-                    const title = rule.type === 'task' ? task?.title : rule.quickTitle;
-                    
-                    let freqText: string = rule.frequency;
-                    if (rule.frequency === 'daily') freqText = 'Daily (M-F)';
-                    if (rule.frequency === 'weekly') freqText = 'Weekly';
-                    if (rule.frequency === 'fortnightly') freqText = 'Fortnightly';
-                    if (rule.frequency === 'monthly') freqText = 'Monthly';
-                    if (rule.frequency === 'monthly-nth') freqText = 'Monthly (Nth)';
+        {/* Sidebar for Recurring Rules List */}
+        <div className={`transition-all duration-300 border-r border-slate-700 flex flex-col bg-slate-900/50 ${isSidebarOpen ? 'w-full md:w-72' : 'w-0 hidden md:flex md:w-12'} relative`}>
+             <div className="p-4 border-b border-slate-700 flex justify-between items-center h-16 shrink-0">
+                 {isSidebarOpen && <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Active Rules</h4>}
+                 <button 
+                   onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                   className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white mx-auto md:mx-0"
+                 >
+                    {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+                 </button>
+             </div>
 
-                    return (
-                        <div key={rule.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-indigo-500/50 transition-colors">
-                            <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-bold uppercase">{freqText}</span>
-                                {onDeleteRule && (
-                                    <button onClick={() => onDeleteRule(rule.id)} className="text-slate-600 hover:text-red-400">
-                                        <Trash2 size={14} />
-                                    </button>
-                                )}
+             {isSidebarOpen && (
+                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {recurringActivities.map(rule => {
+                        const task = rule.taskId ? tasks.find(t => t.id === rule.taskId) : null;
+                        const title = rule.type === 'task' ? task?.title : rule.quickTitle;
+                        
+                        let freqText: string = rule.frequency;
+                        if (rule.frequency === 'daily') freqText = 'Daily (M-F)';
+                        if (rule.frequency === 'weekly') freqText = 'Weekly';
+                        if (rule.frequency === 'fortnightly') freqText = 'Fortnightly';
+                        if (rule.frequency === 'monthly') freqText = 'Monthly';
+                        if (rule.frequency === 'monthly-nth') freqText = 'Monthly (Nth)';
+
+                        return (
+                            <div key={rule.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-indigo-500/50 transition-colors">
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-bold uppercase">{freqText}</span>
+                                    {onDeleteRule && (
+                                        <button onClick={() => onDeleteRule(rule.id)} className="text-slate-600 hover:text-red-400">
+                                            <Trash2 size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-sm font-medium text-slate-200 truncate mb-1" title={title}>{title}</p>
+                                <div className="flex items-center gap-1 text-xs text-slate-500">
+                                    <span className="font-mono text-slate-400">{rule.startTimeStr}</span>
+                                    <span>•</span>
+                                    <span>{rule.durationMinutes}m</span>
+                                </div>
                             </div>
-                            <p className="text-sm font-medium text-slate-200 truncate mb-1" title={title}>{title}</p>
-                            <div className="flex items-center gap-1 text-xs text-slate-500">
-                                <span className="font-mono text-slate-400">{rule.startTimeStr}</span>
-                                <span>•</span>
-                                <span>{rule.durationMinutes}m</span>
-                            </div>
-                        </div>
-                    );
-                })}
-                {recurringActivities.length === 0 && (
-                    <p className="text-xs text-slate-600 text-center py-4">No recurring rules active.</p>
-                )}
-            </div>
+                        );
+                    })}
+                    {recurringActivities.length === 0 && (
+                        <p className="text-xs text-slate-600 text-center py-4">No recurring rules active.</p>
+                    )}
+                 </div>
+             )}
         </div>
 
         {/* Main Form Area */}
         <div className="flex-1 flex flex-col min-w-0">
-            <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center shrink-0">
+            <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center shrink-0 h-16">
             <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 {editingPlan ? <Edit2 className="text-indigo-400" size={20} /> : <CalendarPlus className="text-indigo-400" size={20} />}

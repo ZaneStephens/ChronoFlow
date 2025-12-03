@@ -108,6 +108,12 @@ const Timeline: React.FC<TimelineProps> = ({
   const manualPlans = plannedActivities.filter(p => p.date === dateKey);
   
   const ghostPlans: PlannedActivity[] = recurringActivities.map(rule => {
+      // Logic Fix: Check if task is completed
+      if (rule.taskId) {
+          const task = tasks.find(t => t.id === rule.taskId);
+          if (task && task.status === 'done') return null;
+      }
+
       let matches = false;
       const dayOfWeek = selectedDate.getDay(); 
       const dayOfMonth = selectedDate.getDate(); 
