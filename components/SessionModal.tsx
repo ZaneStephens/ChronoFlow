@@ -286,7 +286,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                         >
                             <option value="">-- Select Task --</option>
-                            {tasks.map(t => (
+                            {tasks.filter(t => t.status !== 'done').map(t => (
                                 <option key={t.id} value={t.id}>{t.title}</option>
                             ))}
                         </select>

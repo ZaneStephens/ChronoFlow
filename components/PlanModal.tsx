@@ -106,9 +106,14 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
     }
   }, [isOpen, initialTime, initialDuration, editingPlan]);
 
-  const filteredTasks = filterClient === 'all' 
-    ? tasks 
-    : tasks.filter(t => t.clientId === filterClient);
+  // Filter tasks based on client selection AND exclude completed tasks
+  const filteredTasks = useMemo(() => {
+    let result = tasks.filter(t => t.status !== 'done'); // Exclude completed
+    if (filterClient !== 'all') {
+      result = result.filter(t => t.clientId === filterClient);
+    }
+    return result;
+  }, [tasks, filterClient]);
 
   // Auto-select the first task if not editing
   useEffect(() => {
@@ -192,8 +197,8 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
       <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col md:flex-row h-[650px] md:h-[600px]">
         
         {/* Sidebar for Recurring Rules List */}
-        <div className={`transition-all duration-300 border-r border-slate-700 flex flex-col bg-slate-900/50 ${isSidebarOpen ? 'w-full md:w-72' : 'w-0 hidden md:flex md:w-12'} relative`}>
-             <div className="p-4 border-b border-slate-700 flex justify-between items-center h-16 shrink-0">
+        <div className={`transition-all duration-300 border-r border-slate-700 flex flex-col bg-slate-900/50 ${isSidebarOpen ? 'w-full md:w-72 max-h-[300px] md:max-h-full shrink-0' : 'w-0 hidden md:flex md:w-12'} relative`}>
+             <div className="p-4 border-b border-slate-700 flex justify-between items-center h-16 shrink-0 bg-slate-900">
                  {isSidebarOpen && <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Active Rules</h4>}
                  <button 
                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -204,7 +209,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
              </div>
 
              {isSidebarOpen && (
-                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                 <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                     {recurringActivities.map(rule => {
                         const task = rule.taskId ? tasks.find(t => t.id === rule.taskId) : null;
                         const title = rule.type === 'task' ? task?.title : rule.quickTitle;
@@ -243,7 +248,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
         </div>
 
         {/* Main Form Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center shrink-0 h-16">
             <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -478,7 +483,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                         {t.title}
                         </option>
                     ))}
-                    {filteredTasks.length === 0 && <option disabled className="p-2 text-slate-500">No tasks found for this client</option>}
+                    {filteredTasks.length === 0 && <option disabled className="p-2 text-slate-500">No active tasks found for this client</option>}
                     </select>
                 </div>
                 </div>

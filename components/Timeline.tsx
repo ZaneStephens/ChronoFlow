@@ -105,7 +105,16 @@ const Timeline: React.FC<TimelineProps> = ({
   const dayEnd = new Date(selectedDate);
   dayEnd.setHours(23,59,59,999);
 
-  const manualPlans = plannedActivities.filter(p => p.date === dateKey);
+  // Filter manual plans for the date AND exclude those linked to completed tasks (unless logged)
+  const manualPlans = plannedActivities.filter(p => {
+      if (p.date !== dateKey) return false;
+      if (p.taskId) {
+          const task = tasks.find(t => t.id === p.taskId);
+          // If task is completed and this plan hasn't been logged yet, hide it
+          if (task && task.status === 'done' && !p.isLogged) return false;
+      }
+      return true;
+  });
   
   const ghostPlans: PlannedActivity[] = recurringActivities.map(rule => {
       // Logic Fix: Check if task is completed
