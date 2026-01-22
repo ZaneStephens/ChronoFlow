@@ -34,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick, 
   };
 
   return (
-    <aside id="sidebar" className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full fixed left-0 top-0 z-20 hidden md:flex">
+    <aside id="sidebar" className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full hidden md:flex shrink-0">
       <div className="p-6 flex items-center space-x-3">
         <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white">
           <Zap size={20} fill="currentColor" />
@@ -50,37 +50,33 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick, 
             key={item.id}
             id={item.domId}
             onClick={() => setView(item.id)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-              currentView === item.id
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${currentView === item.id
                 ? 'bg-indigo-600/10 text-indigo-400 shadow-sm shadow-indigo-900/20'
                 : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
-            }`}
+              }`}
           >
             <item.icon
               size={20}
-              className={`transition-colors ${
-                currentView === item.id ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
-              }`}
+              className={`transition-colors ${currentView === item.id ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+                }`}
             />
             <span className="font-medium">{item.label}</span>
           </button>
         ))}
-        
+
         <div className="pt-4 mt-4 border-t border-slate-800/50">
-           <button
+          <button
             id="nav-focus"
             onClick={() => setView(ViewMode.FOCUS)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-              currentView === ViewMode.FOCUS
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${currentView === ViewMode.FOCUS
                 ? 'bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-900/20'
                 : 'text-slate-400 hover:bg-slate-800/50 hover:text-emerald-300'
-            }`}
+              }`}
           >
             <Disc
               size={20}
-              className={`transition-colors ${
-                currentView === ViewMode.FOCUS ? 'text-emerald-400' : 'text-slate-500 group-hover:text-emerald-300'
-              }`}
+              className={`transition-colors ${currentView === ViewMode.FOCUS ? 'text-emerald-400' : 'text-slate-500 group-hover:text-emerald-300'
+                }`}
             />
             <span className="font-medium">Focus Mode</span>
           </button>
@@ -90,30 +86,30 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick, 
       <div className="p-6 border-t border-slate-800 space-y-4">
         {/* Data Management Buttons */}
         <div className="grid grid-cols-2 gap-2">
-            <button 
-                onClick={onExport}
-                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-3 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
-                title="Export all data to JSON"
-            >
-                <Download size={14} /> Export
-            </button>
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-3 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
-                title="Import data from JSON"
-            >
-                <Upload size={14} /> Import
-            </button>
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                className="hidden" 
-                accept=".json"
-            />
+          <button
+            onClick={onExport}
+            className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-3 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+            title="Export all data to JSON"
+          >
+            <Download size={14} /> Export
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-3 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+            title="Import data from JSON"
+          >
+            <Upload size={14} /> Import
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            accept=".json"
+          />
         </div>
 
-        <button 
+        <button
           onClick={onSearchClick}
           className="w-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white py-2 px-4 rounded-lg flex items-center gap-2 transition-colors text-sm border border-slate-700"
         >
