@@ -609,16 +609,19 @@ const InnerApp: React.FC = () => {
               <Timeline
                 sessions={sessions}
                 plannedActivities={plannedActivities}
+                recurringActivities={recurringActivities}
                 tasks={tasks}
-                activeTimer={activeTimer}
-                onEditSession={openEditSession}
-                onAddManualEntry={handleManualEntry}
+                clients={clients}
+                subtasks={subtasks}
                 onAddPlan={handleAddPlan}
-                onEditPlan={handleEditPlan}
-                onUpdatePlan={handleUpdatePlan}
-                onChangePlanLogStatus={handleTogglePlanLog}
-                onDeletePlan={handleDeletePlan}
+                onToggleLog={handleTogglePlanLog}
                 onStartTimer={handleStartTimer}
+                onDeletePlan={handleDeletePlan}
+                onEditSession={openEditSession}
+                onPreviewTask={setPreviewTask}
+                onManualEntry={handleManualEntry}
+                onUpdatePlan={handleUpdatePlan}
+                onEditPlan={handleEditPlan}
               />
             )}
 
