@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastMessage {
   id: string;
@@ -36,6 +36,7 @@ const Toast: React.FC<ToastMessage & { onRemove: () => void }> = ({ type, messag
     switch (type) {
       case 'success': return 'bg-slate-800 border-l-4 border-emerald-500 text-slate-100';
       case 'error': return 'bg-slate-800 border-l-4 border-red-500 text-slate-100';
+      case 'warning': return 'bg-slate-800 border-l-4 border-amber-500 text-slate-100';
       default: return 'bg-slate-800 border-l-4 border-blue-500 text-slate-100';
     }
   };
@@ -44,6 +45,7 @@ const Toast: React.FC<ToastMessage & { onRemove: () => void }> = ({ type, messag
     switch (type) {
       case 'success': return <CheckCircle2 className="text-emerald-500" size={20} />;
       case 'error': return <AlertCircle className="text-red-500" size={20} />;
+      case 'warning': return <AlertCircle className="text-amber-500" size={20} />;
       default: return <Info className="text-blue-500" size={20} />;
     }
   };

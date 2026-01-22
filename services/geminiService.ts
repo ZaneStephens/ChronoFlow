@@ -15,17 +15,17 @@ const getMspContext = (isInternal: boolean, clientName?: string) => {
 };
 
 export const generateSubtasks = async (
-  taskTitle: string, 
-  taskDescription: string, 
+  taskTitle: string,
+  taskDescription: string,
   mode: 'technical' | 'csm' = 'technical',
   isInternal: boolean = false
 ): Promise<{ title: string }[]> => {
   const ai = getAiClient();
-  
+
   const mspContext = getMspContext(isInternal);
 
   let systemInstruction = "";
-  
+
   if (mode === 'technical') {
     systemInstruction = `
       ${mspContext}
@@ -53,7 +53,7 @@ export const generateSubtasks = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -72,7 +72,7 @@ export const generateSubtasks = async (
 
     const text = response.text;
     if (!text) return [];
-    
+
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
@@ -82,19 +82,19 @@ export const generateSubtasks = async (
 };
 
 export const generateClientReport = async (
-  clientName: string, 
-  startDate: string, 
-  endDate: string, 
+  clientName: string,
+  startDate: string,
+  endDate: string,
   items: { title: string; durationMinutes: number; status: string; notes: string[] }[],
   isInternal: boolean = false
 ) => {
   const ai = getAiClient();
-  
+
   const itemsSummary = items.map(t => {
     const notesSummary = t.notes.length > 0 ? `\n    - Activity Notes: ${t.notes.join('; ')}` : '';
     return `- ${t.title} (${t.durationMinutes} mins) [Status: ${t.status}]${notesSummary}`;
   }).join('\n');
-  
+
   const totalMinutes = items.reduce((acc, curr) => acc + curr.durationMinutes, 0);
   const totalHours = (totalMinutes / 60).toFixed(1);
 
@@ -125,7 +125,7 @@ export const generateClientReport = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
     });
     return response.text;
@@ -149,7 +149,7 @@ export const generateTaskReport = async (
 
   const subtaskSummary = subtasks.map(s => `- [${s.isCompleted ? 'x' : ' '}] ${s.title}`).join('\n');
   const logSummary = workLogs.map(l => `- ${l.date} (${l.durationMinutes}m): ${l.notes}`).join('\n');
-  
+
   const mspContext = getMspContext(isInternal, clientName);
 
   const prompt = `
@@ -179,7 +179,7 @@ export const generateTaskReport = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
     });
     return response.text;
@@ -220,71 +220,71 @@ export const generateProjectPlan = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-                description: { type: Type.STRING },
-                milestones: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            title: { type: Type.STRING },
-                            dueDateOffsetDays: { type: Type.INTEGER }
-                        }
-                    }
-                },
-                risks: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            risk: { type: Type.STRING },
-                            impact: { type: Type.STRING },
-                            mitigation: { type: Type.STRING }
-                        }
-                    }
+          type: Type.OBJECT,
+          properties: {
+            description: { type: Type.STRING },
+            milestones: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  dueDateOffsetDays: { type: Type.INTEGER }
                 }
+              }
+            },
+            risks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  risk: { type: Type.STRING },
+                  impact: { type: Type.STRING },
+                  mitigation: { type: Type.STRING }
+                }
+              }
             }
+          }
         }
       }
     });
 
     const text = response.text;
     if (!text) throw new Error("No response from AI");
-    
+
     const parsed = JSON.parse(text);
     return {
-        description: parsed.description || "No description generated.",
-        milestones: Array.isArray(parsed.milestones) ? parsed.milestones : [],
-        risks: Array.isArray(parsed.risks) ? parsed.risks : []
+      description: parsed.description || "No description generated.",
+      milestones: Array.isArray(parsed.milestones) ? parsed.milestones : [],
+      risks: Array.isArray(parsed.risks) ? parsed.risks : []
     };
   } catch (error) {
     console.error("Gemini AI Project Plan Error:", error);
     return {
-        description: "Could not generate plan.",
-        milestones: [],
-        risks: []
+      description: "Could not generate plan.",
+      milestones: [],
+      risks: []
     };
   }
 };
 
 export const updateProjectPlan = async (
-    projectTitle: string,
-    currentDescription: string,
-    completedMilestones: string[],
-    changeDescription: string,
-    isInternal: boolean = false
+  projectTitle: string,
+  currentDescription: string,
+  completedMilestones: string[],
+  changeDescription: string,
+  isInternal: boolean = false
 ): Promise<{ newMilestones: { title: string; dueDateOffsetDays: number }[]; newRisks: { risk: string; impact: string; mitigation: string }[] }> => {
-    const ai = getAiClient();
+  const ai = getAiClient();
 
-    const mspContext = getMspContext(isInternal);
+  const mspContext = getMspContext(isInternal);
 
-    const prompt = `
+  const prompt = `
       ${mspContext}
       You are a Senior Technical Project Manager re-planning a project due to a scope change or roadblock.
       
@@ -304,57 +304,57 @@ export const updateProjectPlan = async (
         "newRisks": [{ "risk": "New Risk", "impact": "High", "mitigation": "Strategy" }]
       }
     `;
-    
-    try {
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            newMilestones: {
+              type: Type.ARRAY,
+              items: {
                 type: Type.OBJECT,
                 properties: {
-                    newMilestones: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                title: { type: Type.STRING },
-                                dueDateOffsetDays: { type: Type.INTEGER }
-                            }
-                        }
-                    },
-                    newRisks: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                risk: { type: Type.STRING },
-                                impact: { type: Type.STRING },
-                                mitigation: { type: Type.STRING }
-                            }
-                        }
-                    }
+                  title: { type: Type.STRING },
+                  dueDateOffsetDays: { type: Type.INTEGER }
                 }
+              }
+            },
+            newRisks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  risk: { type: Type.STRING },
+                  impact: { type: Type.STRING },
+                  mitigation: { type: Type.STRING }
+                }
+              }
             }
           }
-        });
-    
-        const text = response.text;
-        if (!text) throw new Error("No response from AI");
-        
-        const parsed = JSON.parse(text);
-        return {
-            newMilestones: Array.isArray(parsed.newMilestones) ? parsed.newMilestones : [],
-            newRisks: Array.isArray(parsed.newRisks) ? parsed.newRisks : []
-        };
-      } catch (error) {
-        console.error("Gemini AI Re-Plan Error:", error);
-        return {
-            newMilestones: [],
-            newRisks: []
-        };
+        }
       }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response from AI");
+
+    const parsed = JSON.parse(text);
+    return {
+      newMilestones: Array.isArray(parsed.newMilestones) ? parsed.newMilestones : [],
+      newRisks: Array.isArray(parsed.newRisks) ? parsed.newRisks : []
+    };
+  } catch (error) {
+    console.error("Gemini AI Re-Plan Error:", error);
+    return {
+      newMilestones: [],
+      newRisks: []
+    };
+  }
 }
 
 // --- Quarterly Rocks AI ---
@@ -378,7 +378,7 @@ export const generateRockPlan = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         systemInstruction: "You are a helpful assistant that outputs strict JSON. You value conciseness. You never include internal monologue, dates, or reasoning in the JSON fields. You return only the requested structured data.",
@@ -407,9 +407,9 @@ export const generateRockPlan = async (
 
     const parsed = JSON.parse(text);
     return {
-        title: parsed.title || rawGoal,
-        description: parsed.description || "",
-        keyResults: Array.isArray(parsed.keyResults) ? parsed.keyResults : []
+      title: parsed.title || rawGoal,
+      description: parsed.description || "",
+      keyResults: Array.isArray(parsed.keyResults) ? parsed.keyResults : []
     };
   } catch (error) {
     console.error("Gemini AI Rock Plan Error:", error);
