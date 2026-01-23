@@ -92,7 +92,32 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const storedSubtasks = localStorage.getItem('subtasks');
         if (storedSubtasks) setSubtasks(JSON.parse(storedSubtasks));
         const storedPlans = localStorage.getItem('plannedActivities');
-        if (storedPlans) setPlannedActivities(JSON.parse(storedPlans));
+        if (storedPlans) {
+            let loadedPlans: PlannedActivity[] = JSON.parse(storedPlans);
+
+            // Rollover Logic: Move uncompleted non-recurring past activities to today
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = String(today.getMonth() + 1).padStart(2, '0');
+            const dStr = String(today.getDate()).padStart(2, '0');
+            const todayKey = `${y}-${m}-${dStr}`;
+
+            loadedPlans = loadedPlans.map(p => {
+                if (!p.recurringId && !p.isLogged && p.date < todayKey) {
+                    const oldTime = new Date(p.startTime);
+                    const newStart = new Date(today);
+                    newStart.setHours(oldTime.getHours(), oldTime.getMinutes(), 0, 0);
+
+                    return {
+                        ...p,
+                        date: todayKey,
+                        startTime: newStart.getTime()
+                    };
+                }
+                return p;
+            });
+            setPlannedActivities(loadedPlans);
+        }
         const storedRecurring = localStorage.getItem('recurringActivities');
         if (storedRecurring) setRecurringActivities(JSON.parse(storedRecurring));
     }, []);
