@@ -364,10 +364,7 @@ const InnerApp: React.FC = () => {
       setModalOpen(true);
     } else {
       const durationMs = plan.durationMinutes * 60 * 1000;
-      let blocks = Math.ceil(durationMs / SIX_MINUTES_MS);
-      if (blocks < 1) blocks = 1;
-      const roundedDuration = blocks * SIX_MINUTES_MS;
-      const endTime = plan.startTime + roundedDuration;
+      const endTime = plan.startTime + durationMs;
 
       addSession({
         id: Math.random().toString(36).substr(2, 9),
@@ -387,10 +384,7 @@ const InnerApp: React.FC = () => {
     if (!plan) return;
 
     const durationMs = plan.durationMinutes * 60 * 1000;
-    let blocks = Math.ceil(durationMs / SIX_MINUTES_MS);
-    if (blocks < 1) blocks = 1;
-    const roundedDuration = blocks * SIX_MINUTES_MS;
-    const endTime = plan.startTime + roundedDuration;
+    const endTime = plan.startTime + durationMs;
 
     addSession({
       id: Math.random().toString(36).substr(2, 9),
