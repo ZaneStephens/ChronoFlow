@@ -11,6 +11,9 @@ import TaskPreviewModal from './components/TaskPreviewModal';
 import SearchModal from './components/SearchModal';
 import FocusMode from './components/FocusMode';
 import ReportGenerator from './components/ReportGenerator';
+// Icons for Import Modal
+import { AlertTriangle } from 'lucide-react';
+
 import ProjectManager from './components/ProjectManager';
 import RockManager from './components/RockManager';
 import LandingPage from './components/LandingPage';
@@ -31,16 +34,25 @@ const InnerApp: React.FC = () => {
     addTask, updateTask, deleteTask, updateSubtask, addSubtasks, deleteSubtask,
     addRock, updateRock, deleteRock,
     addPlannedActivity, updatePlannedActivity, deletePlannedActivity,
-    addRecurringActivity, deleteRecurringActivity
+    addRecurringActivity, deleteRecurringActivity,
+    importData // Imported from DataContext
   } = useData();
 
   const {
     activeTimer, sessions,
     startTimer, stopTimerRequest: contextStopRequest, cancelActiveTimer, finalizeSession,
-    addSession, updateSession, deleteSession
+    addSession, updateSession, deleteSession,
+    importSessionData // Imported from TimerContext
   } = useTimer();
 
-  const { showToast, requestConfirm } = useNotification();
+  const showToast = useNotification().showToast;
+  const requestConfirm = useNotification().requestConfirm; // Fix destructuring if needed based on context definition
+
+  // NOTE: Destructuring was `const { showToast, requestConfirm } = useNotification();` in original. 
+  // Assuming useNotification returns an object.
+
+  // --- Import State ---
+  const [pendingImportData, setPendingImportData] = useState<any | null>(null);
 
   // --- UI State (Modals & Tutorial) ---
   const [modalOpen, setModalOpen] = useState(false);
@@ -509,11 +521,49 @@ const InnerApp: React.FC = () => {
   };
 
   const handleImportData = (file: File) => {
-    // import implementation
-    // For brevity, assuming context has actions. 
-    // We would need to expose bulk setters if we want to support import efficiently.
-    // For now, let's just log or say "Import not fully connected in Refactor yet" or implement later.
-    showToast("Import functionality is being updated.", 'warning');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+
+        // Basic validation
+        // We check for at least ONE known key to validate it's likely a ChronoFlow export
+        const validKeys = ['clients', 'projects', 'tasks', 'sessions'];
+        const hasValidKey = validKeys.some(k => Array.isArray(data[k]));
+
+        if (!hasValidKey) {
+          showToast("Invalid data format: Could not find recognizable data arrays.", 'error');
+          return;
+        }
+
+        setPendingImportData(data);
+      } catch (error) {
+        console.error(error);
+        showToast("Failed to parse the file. Please ensure it is a valid JSON export.", 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmImport = (strategy: 'merge' | 'overwrite') => {
+    const data = pendingImportData;
+    if (!data) return;
+
+    if (strategy === 'merge') {
+      importData(data, 'merge');
+      importSessionData(data, 'merge');
+      showToast("Import successful: Data merged.", 'success');
+    } else {
+      // Overwrite
+      // Safety: Clear active timer handled in context
+      importData(data, 'overwrite');
+      importSessionData(data, 'overwrite');
+
+      showToast("Import successful: Data overwritten.", 'success');
+    }
+
+    setPendingImportData(null);
   };
 
 
@@ -681,6 +731,42 @@ const InnerApp: React.FC = () => {
           setSearchOpen(false);
         }}
       />
+
+      {/* Import Confirmation Modal */}
+      {pendingImportData && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-6 w-full max-w-md animate-in fade-in zoom-in">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <AlertTriangle className="text-amber-500" /> Confirm Import
+            </h3>
+            <p className="text-slate-300 mb-6">
+              How would you like to handle the imported data?
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => confirmImport('merge')}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2"
+              >
+                Merge with existing data
+                <span className="text-xs opacity-75">(Recommended)</span>
+              </button>
+              <button
+                onClick={() => confirmImport('overwrite')}
+                className="bg-slate-700 hover:bg-red-600 hover:text-white text-slate-300 font-medium py-3 rounded-lg flex items-center justify-center gap-2"
+              >
+                Overwrite all data
+                <span className="text-xs opacity-75">(Dangerous)</span>
+              </button>
+              <button
+                onClick={() => setPendingImportData(null)}
+                className="text-slate-400 hover:text-white py-2 mt-2"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tutorial Overlay */}
       {showTutorial && (
