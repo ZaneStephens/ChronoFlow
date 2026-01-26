@@ -46,6 +46,8 @@ interface DataContextType {
     deleteRecurringActivity: (id: string) => void;
 
     addTemplate: (template: ProjectTemplate) => void;
+
+    importData: (data: any, strategy: 'merge' | 'overwrite') => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -218,6 +220,36 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Templates
     const addTemplate = (template: ProjectTemplate) => setCustomTemplates(prev => [...prev, template]);
 
+    // Import Helper
+    const importData = (data: any, strategy: 'merge' | 'overwrite') => {
+        if (strategy === 'merge') {
+            const merge = <T extends { id: string }>(current: T[], imported: T[] = []) => {
+                const map = new Map(current.map(i => [i.id, i]));
+                imported.forEach(i => map.set(i.id, i));
+                return Array.from(map.values());
+            };
+
+            if (data.clients) setClients(prev => merge(prev, data.clients));
+            if (data.projects) setProjects(prev => merge(prev, data.projects));
+            if (data.customTemplates) setCustomTemplates(prev => merge(prev, data.customTemplates));
+            if (data.rocks) setRocks(prev => merge(prev, data.rocks));
+            if (data.tasks) setTasks(prev => merge(prev, data.tasks));
+            if (data.subtasks) setSubtasks(prev => merge(prev, data.subtasks));
+            if (data.plannedActivities) setPlannedActivities(prev => merge(prev, data.plannedActivities));
+            if (data.recurringActivities) setRecurringActivities(prev => merge(prev, data.recurringActivities));
+        } else {
+            // Overwrite
+            if (data.clients) setClients(data.clients);
+            if (data.projects) setProjects(data.projects);
+            if (data.customTemplates) setCustomTemplates(data.customTemplates);
+            if (data.rocks) setRocks(data.rocks);
+            if (data.tasks) setTasks(data.tasks);
+            if (data.subtasks) setSubtasks(data.subtasks);
+            if (data.plannedActivities) setPlannedActivities(data.plannedActivities);
+            if (data.recurringActivities) setRecurringActivities(data.recurringActivities);
+        }
+    };
+
 
     return (
         <DataContext.Provider value={{
@@ -229,7 +261,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             addRock, updateRock, deleteRock,
             addPlannedActivity, updatePlannedActivity, deletePlannedActivity,
             addRecurringActivity, deleteRecurringActivity,
-            addTemplate
+            addTemplate,
+            importData
         }}>
             {children}
         </DataContext.Provider>

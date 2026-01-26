@@ -21,6 +21,8 @@ interface TimerContextType {
     updateSession: (sessionId: string, updates: Partial<TimerSession>) => void;
     deleteSession: (sessionId: string) => void;
 
+    importSessionData: (data: any, strategy: 'merge' | 'overwrite') => void;
+
     // External State Trigger (legacy support or new architecture)
     // We might expose state booleans here too if the modal logic lives here or up a level. 
     // Ideally, TimerContext handles logic, but Modals are UI. 
@@ -220,12 +222,30 @@ export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setSessions(prev => prev.filter(s => s.id !== sessionId));
     };
 
+    const importSessionData = (data: any, strategy: 'merge' | 'overwrite') => {
+        if (strategy === 'merge') {
+            if (data.sessions) {
+                setSessions(prev => {
+                    const map = new Map(prev.map(s => [s.id, s]));
+                    (data.sessions as TimerSession[]).forEach(s => map.set(s.id, s));
+                    return Array.from(map.values());
+                });
+            }
+        } else {
+            if (data.sessions) {
+                setSessions(data.sessions);
+                setActiveTimer(null); // Clear active timer on overwrite for safety
+            }
+        }
+    };
+
     return (
         <TimerContext.Provider value={{
             activeTimer, sessions,
             startTimer, stopTimerRequest: () => { }, // Placeholder for now usually
             cancelActiveTimer, finalizeSession,
-            addSession, updateSession, deleteSession
+            addSession, updateSession, deleteSession,
+            importSessionData
         }}>
             {children}
         </TimerContext.Provider>
