@@ -701,7 +701,8 @@ const InnerApp: React.FC = () => {
       <PlanModal
         isOpen={planModalOpen}
         onClose={() => setPlanModalOpen(false)}
-        initialData={planInitData}
+        initialTime={planInitData?.time}
+        initialDuration={planInitData?.duration}
         editingPlan={editingPlan}
         tasks={tasks}
         clients={clients}
