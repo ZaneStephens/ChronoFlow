@@ -6,7 +6,7 @@ import ConfirmModal, { ConfirmModalConfig } from '../components/ConfirmModal';
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 interface NotificationContextType {
-    showToast: (message: string, type?: ToastType) => void;
+    showToast: (message: string, type?: ToastType, onUndo?: () => void) => void;
     requestConfirm: (config: Omit<ConfirmModalConfig, 'isOpen' | 'onConfirm' | 'onCancel'> & { onConfirm: () => void; onCancel?: () => void }) => void;
 }
 
@@ -33,9 +33,9 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         onCancel: () => { },
     });
 
-    const showToast = (message: string, type: ToastType = 'info') => {
+    const showToast = (message: string, type: ToastType = 'info', onUndo?: () => void) => {
         const id = generateId();
-        setToasts(prev => [...prev, { id, message, type }]);
+        setToasts(prev => [...prev, { id, message, type, onUndo }]);
     };
 
     const removeToast = (id: string) => {

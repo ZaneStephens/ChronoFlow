@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import TaskBoard from './components/TaskBoard';
 import ClientManager from './components/ClientManager';
@@ -17,6 +17,8 @@ import { AlertTriangle } from 'lucide-react';
 import ProjectManager from './components/ProjectManager';
 import RockManager from './components/RockManager';
 import LandingPage from './components/LandingPage';
+import ErrorBoundary from './components/ErrorBoundary';
+import WeekView from './components/WeekView';
 import TutorialOverlay, { TutorialStep } from './components/TutorialOverlay';
 import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActivity, RecurringActivity, Project, ProjectTemplate, Rock } from './types';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
@@ -45,11 +47,7 @@ const InnerApp: React.FC = () => {
     importSessionData // Imported from TimerContext
   } = useTimer();
 
-  const showToast = useNotification().showToast;
-  const requestConfirm = useNotification().requestConfirm; // Fix destructuring if needed based on context definition
-
-  // NOTE: Destructuring was `const { showToast, requestConfirm } = useNotification();` in original. 
-  // Assuming useNotification returns an object.
+  const { showToast, requestConfirm } = useNotification();
 
   // --- Import State ---
   const [pendingImportData, setPendingImportData] = useState<any | null>(null);
@@ -81,9 +79,6 @@ const InnerApp: React.FC = () => {
   // Project Log State to initialize Modal
   const [projectLogInit, setProjectLogInit] = useState<{ projectId: string, milestoneId?: string } | undefined>(undefined);
 
-  // Constants
-  const SIX_MINUTES_MS = 6 * 60 * 1000;
-
   // --- Persistence Handlers (Tutorial only) ---
   useEffect(() => {
     // Check for tutorial flag
@@ -92,6 +87,52 @@ const InnerApp: React.FC = () => {
       setShowLanding(false);
     }
   }, []);
+
+  // --- Keyboard Shortcuts (Teams-iframe safe — no Ctrl+ combos) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (isInput) return;
+
+      // "/" — open search (GitHub-style)
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+      // Escape — close search
+      if (e.key === 'Escape') {
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // --- In-app Plan Reminders (no browser Notification API — Teams iframe safe) ---
+  const remindedPlansRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const checkReminders = () => {
+      const now = Date.now();
+      const fiveMinutes = 5 * 60 * 1000;
+
+      plannedActivities
+        .filter(p => !p.isLogged && !remindedPlansRef.current.has(p.id))
+        .forEach(plan => {
+          const timeUntil = plan.startTime - now;
+          if (timeUntil > 0 && timeUntil <= fiveMinutes) {
+            remindedPlansRef.current.add(plan.id);
+            const title = plan.quickTitle || tasks.find(t => t.id === plan.taskId)?.title || 'Planned activity';
+            const minutesAway = Math.ceil(timeUntil / 60000);
+            showToast(`\u23F0 "${title}" starts in ${minutesAway} minute${minutesAway !== 1 ? 's' : ''}`, 'info');
+          }
+        });
+    };
+
+    const interval = setInterval(checkReminders, 30000);
+    checkReminders();
+    return () => clearInterval(interval);
+  }, [plannedActivities, tasks, showToast]);
 
   // --- Actions & Handlers ---
 
@@ -174,6 +215,15 @@ const InnerApp: React.FC = () => {
   };
 
   // Timer Handlers (Bridging Context)
+
+  // Effect: When activeTimer becomes null and there's a pending start, start the next timer
+  useEffect(() => {
+    if (!activeTimer && pendingTimerStart) {
+      startTimer(pendingTimerStart.taskId, pendingTimerStart.subtaskId);
+      setPendingTimerStart(null);
+    }
+  }, [activeTimer, pendingTimerStart]);
+
   const handleStartTimer = (taskId?: string, subtaskId?: string, startTimeOverride?: number) => {
     // Local check before calling context
     if (activeTimer) {
@@ -194,20 +244,7 @@ const InnerApp: React.FC = () => {
       // Auto finalize if subtask
       const sub = subtasks.find(s => s.id === timer.subtaskId);
       finalizeSession(timer, sub?.title || '', Date.now());
-
-      // Handle pending start
-      if (pendingTimerStart) {
-        // We need a small delay or state effect to start the next one? 
-        // In React state updates are batched. 
-        // BUT finalizeSession in context updates state.
-        // We can rely on a local effect or just setTimeout. 
-        // Actually, the original App.tsx called setActiveTimer immediately after.
-        // Since `finalizeSession` is in Context, we can't chain easily unless it returns something or we do it here.
-        // Wait, `finalizeSession` in Context does `setActiveTimer(null)`.
-        // So if we call `startTimer` immediately after, it should work.
-        startTimer(pendingTimerStart.taskId, pendingTimerStart.subtaskId, Date.now() + 100); // Small buffer
-        setPendingTimerStart(null);
-      }
+      // pendingTimerStart will be handled by the useEffect above once activeTimer becomes null
     } else {
       setTimerToStop(timer);
       setModalMode('stop');
@@ -220,12 +257,7 @@ const InnerApp: React.FC = () => {
     if (timerToStop) {
       finalizeSession(timerToStop, updates.notes || '', Date.now(), updates);
       setTimerToStop(null);
-
-      // Handle pending start
-      if (pendingTimerStart) {
-        startTimer(pendingTimerStart.taskId, pendingTimerStart.subtaskId, Date.now() + 100);
-        setPendingTimerStart(null);
-      }
+      // pendingTimerStart will be handled by the useEffect above once activeTimer becomes null
     }
   };
 
@@ -263,8 +295,12 @@ const InnerApp: React.FC = () => {
   };
 
   const handleDeleteSession = (sessionId: string) => {
+    const snapshot = sessions.find(s => s.id === sessionId);
     deleteSession(sessionId);
     setModalOpen(false);
+    if (snapshot) {
+      showToast('Session deleted', 'success', () => addSession(snapshot));
+    }
   };
 
   const handleLogProjectTime = (projectId: string, milestoneId?: string) => {
@@ -583,15 +619,20 @@ const InnerApp: React.FC = () => {
         ) : (
           <>
             {view === ViewMode.DASHBOARD && (
-              <Dashboard
-                tasks={tasks}
-                sessions={sessions}
-                activeTimer={activeTimer}
-                plannedActivities={plannedActivities}
-                onStartTimer={handleStartTimer}
-                onStopTimer={handleStopClick}
-                clients={clients}
-              />
+              <>
+                <Dashboard
+                  tasks={tasks}
+                  sessions={sessions}
+                  activeTimer={activeTimer}
+                  plannedActivities={plannedActivities}
+                  onStartTimer={handleStartTimer}
+                  onStopTimer={handleStopClick}
+                  clients={clients}
+                />
+                <div className="px-6 pb-6">
+                  <WeekView sessions={sessions} tasks={tasks} clients={clients} />
+                </div>
+              </>
             )}
             {view === ViewMode.CLIENTS && (
               <ClientManager
@@ -638,7 +679,7 @@ const InnerApp: React.FC = () => {
                 onUpdateTask={updateTask}
                 onDeleteTask={deleteTask}
                 onAddSubtasks={addSubtasks}
-                onUpdateSubtaskTitle={(id, title) => {
+                onUpdateSubtask={(id, title) => {
                   const s = subtasks.find(x => x.id === id);
                   if (s) updateSubtask({ ...s, title });
                 }}
@@ -668,6 +709,23 @@ const InnerApp: React.FC = () => {
                 onEditPlan={handleEditPlan}
               />
             )}
+            {view === ViewMode.REPORTS && (
+              <ReportGenerator
+                clients={clients}
+                tasks={tasks}
+                sessions={sessions}
+                subtasks={subtasks}
+              />
+            )}
+            {view === ViewMode.FOCUS && (
+              <FocusMode
+                activeTimer={activeTimer}
+                tasks={tasks}
+                subtasks={subtasks}
+                onStopTimer={handleStopClick}
+                onStartTimer={handleStartTimer}
+              />
+            )}
 
             {/* Global Overlays */}
             <div className="absolute bottom-6 right-6 z-50">
@@ -688,14 +746,12 @@ const InnerApp: React.FC = () => {
         onClose={() => setModalOpen(false)}
         mode={modalMode}
         session={editingSession}
-        timerToStop={timerToStop}
+        initialData={projectLogInit ? { projectId: projectLogInit.projectId, milestoneId: projectLogInit.milestoneId } : undefined}
         tasks={tasks}
-        subtasks={subtasks}
         onSave={handleSessionSave}
         onDelete={handleDeleteSession}
         clients={clients}
         projects={projects}
-        projectLogInit={projectLogInit}
       />
 
       <PlanModal
@@ -714,6 +770,7 @@ const InnerApp: React.FC = () => {
           task={previewTask}
           onClose={() => setPreviewTask(null)}
           subtasks={subtasks.filter(s => s.taskId === previewTask.id)}
+          clients={clients}
           onUpdateTask={updateTask}
           onStartTimer={handleStartTimer}
           onToggleSubtask={handleToggleSubtask}
@@ -724,6 +781,7 @@ const InnerApp: React.FC = () => {
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
         tasks={tasks}
+        sessions={sessions}
         projects={projects}
         rocks={rocks}
         clients={clients}
@@ -785,13 +843,15 @@ const InnerApp: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <NotificationProvider>
-      <DataProvider>
-        <TimerProvider>
-          <InnerApp />
-        </TimerProvider>
-      </DataProvider>
-    </NotificationProvider>
+    <ErrorBoundary>
+      <NotificationProvider>
+        <DataProvider>
+          <TimerProvider>
+            <InnerApp />
+          </TimerProvider>
+        </DataProvider>
+      </NotificationProvider>
+    </ErrorBoundary>
   );
 };
 

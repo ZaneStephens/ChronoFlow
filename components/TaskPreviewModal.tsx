@@ -4,23 +4,25 @@ import { Task, Subtask, Client } from '../types';
 import { X, Play, Hash, Clock, CheckCircle2, Circle } from 'lucide-react';
 
 interface TaskPreviewModalProps {
-  isOpen: boolean;
   onClose: () => void;
-  task: Task | null;
-  client: Client | null;
+  task: Task;
   subtasks: Subtask[];
+  clients?: Client[];
   onStartTimer: (taskId: string, subtaskId?: string) => void;
+  onUpdateTask?: (task: Task) => void;
+  onToggleSubtask?: (subtaskId: string) => void;
 }
 
 const TaskPreviewModal: React.FC<TaskPreviewModalProps> = ({ 
-  isOpen, 
   onClose, 
   task, 
-  client,
+  clients = [],
   subtasks,
-  onStartTimer 
+  onStartTimer,
+  onUpdateTask,
+  onToggleSubtask
 }) => {
-  if (!isOpen || !task) return null;
+  const client = clients.find(c => c.id === task.clientId) || null;
 
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);

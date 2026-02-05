@@ -3,14 +3,14 @@ import { ViewMode } from '../types';
 import { LayoutDashboard, CheckSquare, Users, PieChart, Zap, CalendarClock, Search, Disc, FolderKanban, Mountain, Download, Upload } from 'lucide-react';
 
 interface SidebarProps {
-  currentView: ViewMode;
+  view: ViewMode;
   setView: (view: ViewMode) => void;
   onSearchClick: () => void;
   onExport: () => void;
   onImport: (file: File) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick, onExport, onImport }) => {
+const Sidebar: React.FC<SidebarProps> = ({ view, setView, onSearchClick, onExport, onImport }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const navItems = [
@@ -50,14 +50,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick, 
             key={item.id}
             id={item.domId}
             onClick={() => setView(item.id)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${currentView === item.id
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${view === item.id
                 ? 'bg-indigo-600/10 text-indigo-400 shadow-sm shadow-indigo-900/20'
                 : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
               }`}
           >
             <item.icon
               size={20}
-              className={`transition-colors ${currentView === item.id ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+              className={`transition-colors ${view === item.id ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
                 }`}
             />
             <span className="font-medium">{item.label}</span>
@@ -68,14 +68,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onSearchClick, 
           <button
             id="nav-focus"
             onClick={() => setView(ViewMode.FOCUS)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${currentView === ViewMode.FOCUS
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${view === ViewMode.FOCUS
                 ? 'bg-emerald-500/10 text-emerald-400 shadow-sm shadow-emerald-900/20'
                 : 'text-slate-400 hover:bg-slate-800/50 hover:text-emerald-300'
               }`}
           >
             <Disc
               size={20}
-              className={`transition-colors ${currentView === ViewMode.FOCUS ? 'text-emerald-400' : 'text-slate-500 group-hover:text-emerald-300'
+              className={`transition-colors ${view === ViewMode.FOCUS ? 'text-emerald-400' : 'text-slate-500 group-hover:text-emerald-300'
                 }`}
             />
             <span className="font-medium">Focus Mode</span>

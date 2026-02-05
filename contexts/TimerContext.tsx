@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { TimerSession, ActiveTimer } from '../types';
 import { useData } from './DataContext';
 
@@ -42,23 +42,28 @@ export const useTimer = () => {
 export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { updateTask, updateSubtask, tasks, subtasks, updatePlannedActivity, plannedActivities } = useData();
 
-    const [sessions, setSessions] = useState<TimerSession[]>([]);
-    const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
+    const isInitialMount = useRef(true);
+
+    const [sessions, setSessions] = useState<TimerSession[]>(() => {
+        const stored = localStorage.getItem('sessions');
+        return stored ? JSON.parse(stored) : [];
+    });
+    const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(() => {
+        const stored = localStorage.getItem('activeTimer');
+        return stored ? JSON.parse(stored) : null;
+    });
 
     // Persistence
-    useEffect(() => {
-        const storedTimer = localStorage.getItem('activeTimer');
-        if (storedTimer) setActiveTimer(JSON.parse(storedTimer));
-        const storedSessions = localStorage.getItem('sessions');
-        if (storedSessions) setSessions(JSON.parse(storedSessions));
-    }, []);
-
     useEffect(() => {
         if (activeTimer) localStorage.setItem('activeTimer', JSON.stringify(activeTimer));
         else localStorage.removeItem('activeTimer');
     }, [activeTimer]);
 
     useEffect(() => {
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
         localStorage.setItem('sessions', JSON.stringify(sessions));
     }, [sessions]);
 

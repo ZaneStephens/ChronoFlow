@@ -9,16 +9,17 @@ export interface TutorialStep {
 }
 
 interface TutorialOverlayProps {
-  steps: TutorialStep[];
+  step: TutorialStep;
+  totalSteps: number;
   currentStepIndex: number;
   onNext: () => void;
   onSkip: () => void;
 }
 
-const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, currentStepIndex, onNext, onSkip }) => {
+const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ step, totalSteps, currentStepIndex, onNext, onSkip }) => {
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
 
-  const currentStep = steps[currentStepIndex];
+  const currentStep = step;
 
   useEffect(() => {
     // Small delay to allow View transitions to render
@@ -98,7 +99,7 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, currentStepInd
           
           <div className="flex items-center justify-between">
             <div className="flex gap-1">
-              {steps.map((_, idx) => (
+              {Array.from({ length: totalSteps }).map((_, idx) => (
                 <div 
                   key={idx} 
                   className={`w-1.5 h-1.5 rounded-full ${idx === currentStepIndex ? 'bg-indigo-500' : 'bg-slate-700'}`}
@@ -110,7 +111,7 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, currentStepInd
               onClick={onNext}
               className="flex items-center gap-2 bg-white text-slate-900 px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-200 transition-colors"
             >
-              {currentStepIndex === steps.length - 1 ? (
+              {currentStepIndex === totalSteps - 1 ? (
                  <>
                    <Sparkles size={16} className="text-indigo-600" />
                    Get Started

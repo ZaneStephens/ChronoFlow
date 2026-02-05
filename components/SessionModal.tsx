@@ -9,7 +9,7 @@ interface SessionModalProps {
   onDelete?: (sessionId: string) => void;
   session?: TimerSession | null; 
   initialData?: Partial<TimerSession>; 
-  mode: 'edit' | 'stop' | 'create';
+  mode: 'edit' | 'stop' | 'log-plan' | 'create';
   tasks: Task[];
   clients?: Client[];
   projects?: Project[];

@@ -1,19 +1,20 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Task, TimerSession, Client, ActiveTimer, Subtask } from '../types';
+import { Task, TimerSession, Client, ActiveTimer } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Clock, CheckCircle2, TrendingUp, Target, Activity } from 'lucide-react';
 
 interface DashboardProps {
   tasks: Task[];
   clients: Client[];
-  subtasks: Subtask[];
   sessions: TimerSession[];
   activeTimer: ActiveTimer | null;
-  onEditSession: (session: TimerSession) => void;
+  plannedActivities?: any[];
+  onStartTimer?: (taskId?: string, subtaskId?: string) => void;
+  onStopTimer?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, sessions, activeTimer, onEditSession }) => {
+const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, sessions, activeTimer }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -118,15 +119,15 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
     return tmp.textContent || tmp.innerText || "";
   };
 
-  const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => (
+  const StatCard = ({ title, value, icon: Icon, bgColor, textColor, subtext }: { title: string, value: string | number, icon: any, bgColor: string, textColor: string, subtext?: string }) => (
     <div className="bg-slate-800 border border-slate-700 p-6 rounded-xl flex items-start justify-between">
       <div>
         <p className="text-slate-400 text-sm font-medium mb-1">{title}</p>
         <h3 className="text-3xl font-bold text-white">{value}</h3>
         {subtext && <p className="text-xs text-slate-500 mt-1">{subtext}</p>}
       </div>
-      <div className={`p-3 rounded-lg ${color} bg-opacity-20`}>
-        <Icon size={24} className={color.replace('bg-', 'text-')} />
+      <div className={`p-3 rounded-lg ${bgColor}`}>
+        <Icon size={24} className={textColor} />
       </div>
     </div>
   );
@@ -158,9 +159,9 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, subtasks, session
           <p className="text-xs text-slate-500 mt-2 text-right">{formatDuration(remainingSeconds)} remaining</p>
         </div>
 
-        <StatCard title="Total Tracked" value={`${totalHours}h`} icon={Clock} color="bg-blue-500 text-blue-400" subtext="Lifetime total" />
-        <StatCard title="Completed Tasks" value={completedTasks} icon={CheckCircle2} color="bg-indigo-500 text-indigo-400" />
-        <StatCard title="Active Clients" value={activeExternalClientsCount} icon={TrendingUp} color="bg-purple-500 text-purple-400" subtext="External only" />
+        <StatCard title="Total Tracked" value={`${totalHours}h`} icon={Clock} bgColor="bg-blue-500/20" textColor="text-blue-400" subtext="Lifetime total" />
+        <StatCard title="Completed Tasks" value={completedTasks} icon={CheckCircle2} bgColor="bg-indigo-500/20" textColor="text-indigo-400" />
+        <StatCard title="Active Clients" value={activeExternalClientsCount} icon={TrendingUp} bgColor="bg-purple-500/20" textColor="text-purple-400" subtext="External only" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8 h-full">

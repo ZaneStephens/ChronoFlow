@@ -14,10 +14,10 @@ interface TaskBoardProps {
   onAddSubtasks: (taskId: string, subtasks: { title: string; link?: string }[]) => void;
   onDeleteTask: (taskId: string) => void;
   onDeleteSubtask: (subtaskId: string) => void;
-  onUpdateTaskStatus: (taskId: string, status: Task['status']) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onStartTimer: (taskId: string, subtaskId?: string) => void;
   onStopTimer: () => void;
+  onPreviewTask?: (task: Task) => void;
 }
 
 const TaskBoard: React.FC<TaskBoardProps> = ({
@@ -31,10 +31,10 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   onAddSubtasks,
   onDeleteTask,
   onDeleteSubtask,
-  onUpdateTaskStatus,
   onToggleSubtask,
   onStartTimer,
   onStopTimer,
+  onPreviewTask,
 }) => {
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
@@ -522,7 +522,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                     <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
 
                     <button
-                        onClick={() => onUpdateTaskStatus(task.id, isDone ? 'todo' : 'done')}
+                        onClick={() => onUpdateTask({...task, status: isDone ? 'todo' : 'done'})}
                         className={`p-2 rounded-full transition-colors ${
                             isDone 
                             ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' 

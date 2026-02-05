@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Task, TimerSession, Client } from '../types';
+import { Task, TimerSession, Client, Project, Rock, ViewMode } from '../types';
 import { Search, X, Calendar, Clock, FileText, Hash } from 'lucide-react';
 
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   tasks: Task[];
-  sessions: TimerSession[];
+  sessions?: TimerSession[];
   clients: Client[];
+  projects?: Project[];
+  rocks?: Rock[];
+  onNavigate?: (view: ViewMode) => void;
 }
 
-const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessions, clients }) => {
+const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessions = [], clients, projects = [], rocks = [], onNavigate }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ type: 'task' | 'session', item: any, score: number }[]>([]);
 

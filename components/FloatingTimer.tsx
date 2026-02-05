@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { ActiveTimer, Task, Subtask } from '../types';
+import { ActiveTimer } from '../types';
 import { Square, Clock, Trash2 } from 'lucide-react';
 
 interface FloatingTimerProps {
   activeTimer: ActiveTimer | null;
-  tasks: Task[];
-  subtasks: Subtask[];
-  stopTimer: () => void;
-  cancelTimer: () => void;
+  onStop: () => void;
+  onCancel: () => void;
+  taskTitle?: string;
 }
 
-const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subtasks, stopTimer, cancelTimer }) => {
+const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, onStop, onCancel, taskTitle }) => {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -29,11 +28,6 @@ const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subta
   }, [activeTimer]);
 
   if (!activeTimer) return null;
-
-  const currentTask = activeTimer.taskId ? tasks.find(t => t.id === activeTimer.taskId) : null;
-  const currentSubtask = activeTimer.subtaskId 
-    ? subtasks.find(s => s.id === activeTimer.subtaskId) 
-    : null;
 
   const formatTime = (seconds: number) => {
     const absSeconds = Math.abs(seconds);
@@ -71,14 +65,8 @@ const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subta
           </div>
           <div className="flex flex-col">
             <h3 className="text-white font-bold truncate max-w-[200px] md:max-w-md text-sm md:text-base tracking-tight shadow-black drop-shadow-md">
-              {currentTask?.title || 'Unallocated Task'}
+              {taskTitle || 'Unallocated Task'}
             </h3>
-            {currentSubtask && (
-              <p className="text-slate-400 text-xs md:text-sm truncate max-w-[150px] flex items-center gap-1.5">
-                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                 {currentSubtask.title}
-              </p>
-            )}
           </div>
         </div>
       </div>
@@ -90,14 +78,14 @@ const FloatingTimer: React.FC<FloatingTimerProps> = ({ activeTimer, tasks, subta
         
         <div className="flex items-center gap-2">
             <button
-                onClick={cancelTimer}
+                onClick={onCancel}
                 className="group bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 p-3 md:p-4 rounded-xl transition-all border border-slate-700 hover:border-red-400/50"
                 title="Discard Timer"
             >
                 <Trash2 size={20} />
             </button>
             <button
-            onClick={stopTimer}
+            onClick={onStop}
             className="group bg-red-500 hover:bg-red-600 text-white p-3 md:p-4 rounded-xl transition-all hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:shadow-[0_0_30px_rgba(239,68,68,0.5)] border border-red-400/50"
             title="Stop & Save Timer"
             >
