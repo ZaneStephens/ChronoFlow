@@ -1,13 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import {
     Client, Task, Subtask, PlannedActivity, RecurringActivity,
     Project, ProjectTemplate, Rock
 } from '../types';
+import { getStore, setStore, setManyStores, type StoreName } from '../services/storageService';
 
 // Simple ID generator
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 interface DataContextType {
+    isLoading: boolean;
     clients: Client[];
     projects: Project[];
     tasks: Task[];
@@ -61,89 +63,97 @@ export const useData = () => {
 };
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    // --- State (lazy-loaded from localStorage) ---
-    const isInitialMount = useRef(true);
+    // --- State ---
+    const isHydrated = useRef(false);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const [clients, setClients] = useState<Client[]>(() => {
-        const stored = localStorage.getItem('clients');
-        return stored ? JSON.parse(stored) : [
-            { id: '1', name: 'TechCorp', color: '#6366f1' },
-            { id: '2', name: 'DesignStudio', color: '#ec4899' },
-        ];
-    });
+    const [clients, setClients] = useState<Client[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [customTemplates, setCustomTemplates] = useState<ProjectTemplate[]>([]);
+    const [rocks, setRocks] = useState<Rock[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+    const [plannedActivities, setPlannedActivities] = useState<PlannedActivity[]>([]);
+    const [recurringActivities, setRecurringActivities] = useState<RecurringActivity[]>([]);
 
-    const [projects, setProjects] = useState<Project[]>(() => {
-        const stored = localStorage.getItem('projects');
-        return stored ? JSON.parse(stored) : [];
-    });
-    const [customTemplates, setCustomTemplates] = useState<ProjectTemplate[]>(() => {
-        const stored = localStorage.getItem('customTemplates');
-        return stored ? JSON.parse(stored) : [];
-    });
-    const [rocks, setRocks] = useState<Rock[]>(() => {
-        const stored = localStorage.getItem('rocks');
-        return stored ? JSON.parse(stored) : [];
-    });
-
-    const [tasks, setTasks] = useState<Task[]>(() => {
-        const stored = localStorage.getItem('tasks');
-        return stored ? JSON.parse(stored) : [
-            { id: 't1', clientId: '1', title: 'Server Migration', description: 'Migrate legacy Ubuntu server to AWS', status: 'in-progress', totalTime: 3600, createdAt: Date.now() },
-        ];
-    });
-
-    const [subtasks, setSubtasks] = useState<Subtask[]>(() => {
-        const stored = localStorage.getItem('subtasks');
-        return stored ? JSON.parse(stored) : [];
-    });
-    const [plannedActivities, setPlannedActivities] = useState<PlannedActivity[]>(() => {
-        const stored = localStorage.getItem('plannedActivities');
-        if (!stored) return [];
-        let loadedPlans: PlannedActivity[] = JSON.parse(stored);
-
-        // Rollover Logic: Move uncompleted non-recurring past activities to today
-        const today = new Date();
-        const y = today.getFullYear();
-        const m = String(today.getMonth() + 1).padStart(2, '0');
-        const dStr = String(today.getDate()).padStart(2, '0');
-        const todayKey = `${y}-${m}-${dStr}`;
-
-        loadedPlans = loadedPlans.map(p => {
-            if (!p.recurringId && !p.isLogged && p.date < todayKey) {
-                const oldTime = new Date(p.startTime);
-                const newStart = new Date(today);
-                newStart.setHours(oldTime.getHours(), oldTime.getMinutes(), 0, 0);
-
-                return {
-                    ...p,
-                    date: todayKey,
-                    startTime: newStart.getTime()
-                };
-            }
-            return p;
-        });
-        return loadedPlans;
-    });
-    const [recurringActivities, setRecurringActivities] = useState<RecurringActivity[]>(() => {
-        const stored = localStorage.getItem('recurringActivities');
-        return stored ? JSON.parse(stored) : [];
-    });
-
-    // --- Persistence (skip initial mount to avoid overwriting with defaults) ---
+    // --- Hydration from IndexedDB ---
     useEffect(() => {
-        if (isInitialMount.current) {
-            isInitialMount.current = false;
-            return;
-        }
-        localStorage.setItem('clients', JSON.stringify(clients));
-        localStorage.setItem('projects', JSON.stringify(projects));
-        localStorage.setItem('customTemplates', JSON.stringify(customTemplates));
-        localStorage.setItem('rocks', JSON.stringify(rocks));
-        localStorage.setItem('tasks', JSON.stringify(tasks));
-        localStorage.setItem('subtasks', JSON.stringify(subtasks));
-        localStorage.setItem('plannedActivities', JSON.stringify(plannedActivities));
-        localStorage.setItem('recurringActivities', JSON.stringify(recurringActivities));
-    }, [clients, projects, customTemplates, rocks, tasks, subtasks, plannedActivities, recurringActivities]);
+        let cancelled = false;
+        (async () => {
+            try {
+                const results = await Promise.all([
+                    getStore<Client[]>('clients'),
+                    getStore<Project[]>('projects'),
+                    getStore<ProjectTemplate[]>('customTemplates'),
+                    getStore<Rock[]>('rocks'),
+                    getStore<Task[]>('tasks'),
+                    getStore<Subtask[]>('subtasks'),
+                    getStore<PlannedActivity[]>('plannedActivities'),
+                    getStore<RecurringActivity[]>('recurringActivities'),
+                ]);
+                if (cancelled) return;
+
+                const [cl, pr, ct, rk, ts, st, pa, ra] = results;
+
+                setClients(cl ?? [
+                    { id: '1', name: 'TechCorp', color: '#6366f1' },
+                    { id: '2', name: 'DesignStudio', color: '#ec4899' },
+                ]);
+                setProjects(pr ?? []);
+                setCustomTemplates(ct ?? []);
+                setRocks(rk ?? []);
+                setTasks(ts ?? [
+                    { id: 't1', clientId: '1', title: 'Server Migration', description: 'Migrate legacy Ubuntu server to AWS', status: 'in-progress', totalTime: 3600, createdAt: Date.now() },
+                ]);
+                setSubtasks(st ?? []);
+
+                // Rollover Logic: Move uncompleted non-recurring past activities to today
+                let loadedPlans = pa ?? [];
+                const today = new Date();
+                const y = today.getFullYear();
+                const m = String(today.getMonth() + 1).padStart(2, '0');
+                const dStr = String(today.getDate()).padStart(2, '0');
+                const todayKey = `${y}-${m}-${dStr}`;
+
+                loadedPlans = loadedPlans.map(p => {
+                    if (!p.recurringId && !p.isLogged && p.date < todayKey) {
+                        const oldTime = new Date(p.startTime);
+                        const newStart = new Date(today);
+                        newStart.setHours(oldTime.getHours(), oldTime.getMinutes(), 0, 0);
+                        return { ...p, date: todayKey, startTime: newStart.getTime() };
+                    }
+                    return p;
+                });
+                setPlannedActivities(loadedPlans);
+
+                setRecurringActivities(ra ?? []);
+                isHydrated.current = true;
+            } catch (err) {
+                console.error('[DataContext] IndexedDB hydration failed, using defaults:', err);
+                isHydrated.current = true;
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    // --- Write-through to IndexedDB (skip until hydrated) ---
+    const persist = useCallback((name: StoreName, value: unknown) => {
+        if (!isHydrated.current) return;
+        setStore(name, value).catch(err =>
+            console.error(`[DataContext] Failed to persist ${name}:`, err)
+        );
+    }, []);
+
+    useEffect(() => { persist('clients', clients); }, [clients]);
+    useEffect(() => { persist('projects', projects); }, [projects]);
+    useEffect(() => { persist('customTemplates', customTemplates); }, [customTemplates]);
+    useEffect(() => { persist('rocks', rocks); }, [rocks]);
+    useEffect(() => { persist('tasks', tasks); }, [tasks]);
+    useEffect(() => { persist('subtasks', subtasks); }, [subtasks]);
+    useEffect(() => { persist('plannedActivities', plannedActivities); }, [plannedActivities]);
+    useEffect(() => { persist('recurringActivities', recurringActivities); }, [recurringActivities]);
 
     // --- Actions ---
 
@@ -263,6 +273,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     return (
         <DataContext.Provider value={{
+            isLoading,
             clients, projects, tasks, subtasks, rocks, plannedActivities, recurringActivities, customTemplates,
             addClient, updateClient, deleteClient,
             addProject, updateProject, deleteProject,

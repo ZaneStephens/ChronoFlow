@@ -1,12 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { TimerSession, ActiveTimer } from '../types';
 import { useData } from './DataContext';
+import { getStore, setStore, removeStore } from '../services/storageService';
 
 // Constants
 const SIX_MINUTES_MS = 6 * 60 * 1000;
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 interface TimerContextType {
+    isLoading: boolean;
     activeTimer: ActiveTimer | null;
     sessions: TimerSession[];
 
@@ -42,29 +44,48 @@ export const useTimer = () => {
 export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { updateTask, updateSubtask, tasks, subtasks, updatePlannedActivity, plannedActivities } = useData();
 
-    const isInitialMount = useRef(true);
+    const isHydrated = useRef(false);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const [sessions, setSessions] = useState<TimerSession[]>(() => {
-        const stored = localStorage.getItem('sessions');
-        return stored ? JSON.parse(stored) : [];
-    });
-    const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(() => {
-        const stored = localStorage.getItem('activeTimer');
-        return stored ? JSON.parse(stored) : null;
-    });
+    const [sessions, setSessions] = useState<TimerSession[]>([]);
+    const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
 
-    // Persistence
+    // --- Hydration from IndexedDB ---
     useEffect(() => {
-        if (activeTimer) localStorage.setItem('activeTimer', JSON.stringify(activeTimer));
-        else localStorage.removeItem('activeTimer');
+        let cancelled = false;
+        (async () => {
+            try {
+                const [storedSessions, storedTimer] = await Promise.all([
+                    getStore<TimerSession[]>('sessions'),
+                    getStore<ActiveTimer | null>('activeTimer'),
+                ]);
+                if (cancelled) return;
+                setSessions(storedSessions ?? []);
+                setActiveTimer(storedTimer ?? null);
+                isHydrated.current = true;
+            } catch (err) {
+                console.error('[TimerContext] IndexedDB hydration failed:', err);
+                isHydrated.current = true;
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    // --- Write-through persistence ---
+    useEffect(() => {
+        if (!isHydrated.current) return;
+        if (activeTimer) {
+            setStore('activeTimer', activeTimer).catch(console.error);
+        } else {
+            removeStore('activeTimer').catch(console.error);
+        }
     }, [activeTimer]);
 
     useEffect(() => {
-        if (isInitialMount.current) {
-            isInitialMount.current = false;
-            return;
-        }
-        localStorage.setItem('sessions', JSON.stringify(sessions));
+        if (!isHydrated.current) return;
+        setStore('sessions', sessions).catch(console.error);
     }, [sessions]);
 
     // --- Logic ---
@@ -246,6 +267,7 @@ export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     return (
         <TimerContext.Provider value={{
+            isLoading,
             activeTimer, sessions,
             startTimer, stopTimerRequest: () => { }, // Placeholder for now usually
             cancelActiveTimer, finalizeSession,

@@ -24,6 +24,7 @@ import { ViewMode, Client, Task, Subtask, ActiveTimer, TimerSession, PlannedActi
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { DataProvider, useData } from './contexts/DataContext';
 import { TimerProvider, useTimer } from './contexts/TimerContext';
+import { migrateFromLocalStorage } from './services/storageService';
 
 const InnerApp: React.FC = () => {
   const [view, setView] = useState<ViewMode>(ViewMode.DASHBOARD);
@@ -31,6 +32,7 @@ const InnerApp: React.FC = () => {
   // --- Context Hooks ---
   const {
     clients, projects, tasks, subtasks, rocks, plannedActivities, recurringActivities, customTemplates,
+    isLoading: dataLoading,
     addClient, updateClient, deleteClient,
     addProject, updateProject, deleteProject, addTemplate,
     addTask, updateTask, deleteTask, updateSubtask, addSubtasks, deleteSubtask,
@@ -42,6 +44,7 @@ const InnerApp: React.FC = () => {
 
   const {
     activeTimer, sessions,
+    isLoading: timerLoading,
     startTimer, stopTimerRequest: contextStopRequest, cancelActiveTimer, finalizeSession,
     addSession, updateSession, deleteSession,
     importSessionData // Imported from TimerContext
@@ -603,6 +606,18 @@ const InnerApp: React.FC = () => {
   };
 
 
+  // Show loading screen while IndexedDB hydrates
+  if (dataLoading || timerLoading) {
+    return (
+      <div className="flex h-screen bg-slate-900 items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm font-medium">Loading ChronoFlow...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden select-none">
       <Sidebar
@@ -840,6 +855,26 @@ const InnerApp: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  const [migrated, setMigrated] = useState(false);
+
+  // Run one-time localStorage → IndexedDB migration before mounting providers
+  useEffect(() => {
+    migrateFromLocalStorage()
+      .then(() => setMigrated(true))
+      .catch(() => setMigrated(true)); // Continue even if migration fails
+  }, []);
+
+  if (!migrated) {
+    return (
+      <div className="flex h-screen bg-slate-900 items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm font-medium">Initializing storage...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <NotificationProvider>
