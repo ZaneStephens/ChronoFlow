@@ -183,7 +183,7 @@ const WeekView: React.FC<WeekViewProps> = ({ sessions, tasks, clients, section }
   const showHeatmap = !section || section === 'heatmap';
 
   return (
-    <div className="space-y-6 px-6 pb-6">
+    <div className="space-y-6">
       {/* Week Overview */}
       {showOverview && <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">

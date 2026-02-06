@@ -353,6 +353,10 @@ const Timeline: React.FC<TimelineProps> = ({
        ].map(field => `"${field}"`).join(',');
     });
     
+    rows.sort((a, b) => {
+      const getClient = (row: string) => row.split(',')[1]?.replace(/"/g, '') || '';
+      return getClient(a).localeCompare(getClient(b));
+    });
     const csvContent = "Ticket #,Client,Date,Start,End,Description\n" + rows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

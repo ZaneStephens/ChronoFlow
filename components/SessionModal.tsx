@@ -238,6 +238,15 @@ const SessionModal: React.FC<SessionModalProps> = ({
       taskTitle = session.customTitle;
   }
 
+  // Resolve client name for modal title
+  let modalClientName: string | null = null;
+  if (mode === 'edit' && session) {
+    const resolvedClientId = session.clientId || (session.taskId ? tasks.find(t => t.id === session.taskId)?.clientId : undefined);
+    if (resolvedClientId) {
+      modalClientName = clients.find(c => c.id === resolvedClientId)?.name || null;
+    }
+  }
+
   const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   return (
@@ -246,7 +255,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
         <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             {mode === 'stop' ? <Clock className="text-indigo-400" /> : <Clock className="text-emerald-400" />}
-            {mode === 'stop' ? 'Save Session Notes' : mode === 'create' ? 'Create New Entry' : 'Edit Session'}
+            {mode === 'stop' ? 'Save Session Notes' : mode === 'create' ? 'Create New Entry' : `Edit Session${modalClientName ? ` - ${modalClientName}` : ''}`}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X size={20} />
