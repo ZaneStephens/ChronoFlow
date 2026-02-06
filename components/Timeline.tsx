@@ -48,8 +48,8 @@ const Timeline: React.FC<TimelineProps> = ({
   const [optimisticStartTime, setOptimisticStartTime] = useState<number | null>(null);
 
   // Constants for Layout
-  const START_HOUR = 6; 
-  const END_HOUR = 18; 
+    const START_HOUR = 6; 
+    const END_HOUR = 18; 
   const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * pixelsPerHour;
 
   useEffect(() => {
@@ -290,6 +290,19 @@ const Timeline: React.FC<TimelineProps> = ({
       return { start, duration };
   };
 
+  const clampManualEntryRange = (startTime: number, endTime: number) => {
+      const dayStartTime = new Date(selectedDate);
+      dayStartTime.setHours(START_HOUR, 0, 0, 0);
+      const dayEndTime = new Date(selectedDate);
+      dayEndTime.setHours(END_HOUR, 0, 0, 0);
+
+      const clampedStart = Math.max(startTime, dayStartTime.getTime());
+      const clampedEnd = Math.min(endTime, dayEndTime.getTime());
+
+      if (clampedEnd <= clampedStart) return null;
+      return { start: clampedStart, end: clampedEnd };
+  };
+
   const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!scrollContainerRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -505,8 +518,9 @@ const Timeline: React.FC<TimelineProps> = ({
                                 <button
                                     onClick={(e) => { 
                                       e.stopPropagation(); 
-                                      const { start, duration } = calculateSafeStartBefore(session.startTime, 30);
-                                      onManualEntry(start, start + duration * 60 * 1000); 
+                                                                            const { start, duration } = calculateSafeStartBefore(session.startTime, 30);
+                                                                            const clamped = clampManualEntryRange(start, start + duration * 60 * 1000);
+                                                                            if (clamped) onManualEntry(clamped.start, clamped.end); 
                                     }}
                                     className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 w-6 h-6 bg-slate-700 hover:bg-indigo-600 rounded-full text-white shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
                                     title="Fill gap before (Manual Entry)"
@@ -529,7 +543,7 @@ const Timeline: React.FC<TimelineProps> = ({
                                           <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setGapMenuSessionId(null); }}></div>
                                           <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 w-32 animate-in fade-in zoom-in-95 duration-100">
                                              <button onClick={(e) => { e.stopPropagation(); onStartTimer(undefined, undefined, displayEndTime); setGapMenuSessionId(null); }} className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-indigo-600 rounded transition-colors text-left"><Play size={12} /> Start Timer</button>
-                                             <button onClick={(e) => { e.stopPropagation(); const safeDuration = calculateSafeDuration(displayEndTime, 30); onManualEntry(displayEndTime, displayEndTime + safeDuration * 60 * 1000); setGapMenuSessionId(null); }} className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-emerald-600 rounded transition-colors text-left"><CheckSquare size={12} /> Manual Log</button>
+                                             <button onClick={(e) => { e.stopPropagation(); const safeDuration = calculateSafeDuration(displayEndTime, 30); const clamped = clampManualEntryRange(displayEndTime, displayEndTime + safeDuration * 60 * 1000); if (clamped) onManualEntry(clamped.start, clamped.end); setGapMenuSessionId(null); }} className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-emerald-600 rounded transition-colors text-left"><CheckSquare size={12} /> Manual Log</button>
                                           </div>
                                        </>
                                    )}
