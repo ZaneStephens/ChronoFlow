@@ -210,7 +210,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   };
 
   return (
-    <div id="task-board" className="space-y-6 pb-24">
+    <div id="task-board" className="space-y-6 p-6 pb-24">
       {/* Header & Filters */}
       <div className="flex flex-col gap-6">
         <div className="flex items-start justify-between">

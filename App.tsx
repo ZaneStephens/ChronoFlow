@@ -629,9 +629,7 @@ const InnerApp: React.FC = () => {
                   onStopTimer={handleStopClick}
                   clients={clients}
                 />
-                <div className="px-6 pb-6">
-                  <WeekView sessions={sessions} tasks={tasks} clients={clients} />
-                </div>
+                <WeekView sessions={sessions} tasks={tasks} clients={clients} />
               </>
             )}
             {view === ViewMode.CLIENTS && (

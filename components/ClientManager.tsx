@@ -88,7 +88,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onU
   };
 
   return (
-    <div id="client-manager" className="space-y-8 pb-20">
+    <div id="client-manager" className="space-y-8 p-6 pb-20">
       <div>
         <h2 className="text-2xl font-bold text-white mb-2">Client Management</h2>
         <p className="text-slate-400 text-sm">Organize your portfolio and client details.</p>

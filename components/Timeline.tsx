@@ -356,7 +356,7 @@ const Timeline: React.FC<TimelineProps> = ({
   };
 
   return (
-    <div id="timeline-view" className="flex flex-col h-[calc(100vh-6rem)] gap-4">
+    <div id="timeline-view" className="flex flex-col h-[calc(100vh-6rem)] p-6 gap-4">
       <div className="flex flex-col md:flex-row items-center justify-between bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg shrink-0">
         <div className="flex items-center gap-4">
            <div className="flex items-center bg-slate-900 rounded-lg border border-slate-700 p-1">

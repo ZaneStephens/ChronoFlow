@@ -133,7 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, sessions, activeT
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6">
       <div>
         <h2 className="text-2xl font-bold text-white mb-2">Dashboard</h2>
         <p className="text-slate-400 text-sm">Track your daily progress towards the 7.6h goal.</p>

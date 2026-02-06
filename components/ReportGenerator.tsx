@@ -179,7 +179,7 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ clients, tasks, sessi
   };
 
   return (
-    <div id="report-generator" className="space-y-6">
+    <div id="report-generator" className="space-y-6 p-6">
        <div>
         <h2 className="text-2xl font-bold text-white mb-2">Analytics & Reporting</h2>
         <p className="text-slate-400 text-sm">Generate AI-powered status updates or deep-dive into task history.</p>

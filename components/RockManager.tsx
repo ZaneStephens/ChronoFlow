@@ -605,7 +605,7 @@ const RockManager: React.FC<RockManagerProps> = ({
     };
 
     return (
-        <div id="rock-manager" className="pb-20">
+        <div id="rock-manager" className="p-6 pb-20">
             {view === 'list' && renderList()}
             {view === 'create' && renderCreate()}
             {view === 'detail' && renderDetail()}
