@@ -12,9 +12,10 @@ interface DashboardProps {
   plannedActivities?: any[];
   onStartTimer?: (taskId?: string, subtaskId?: string) => void;
   onStopTimer?: () => void;
+  children?: React.ReactNode;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, sessions, activeTimer }) => {
+const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, sessions, activeTimer, children }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -164,6 +165,8 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, sessions, activeT
         <StatCard title="Active Clients" value={activeExternalClientsCount} icon={TrendingUp} bgColor="bg-purple-500/20" textColor="text-purple-400" subtext="External only" />
       </div>
 
+      {children}
+
       <div className="grid lg:grid-cols-3 gap-8 h-full">
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 h-96">
@@ -171,7 +174,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, sessions, activeT
             <div className="h-full pb-8">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
-                  <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" interval={0} height={80} />
                   <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}h`} />
                   <Tooltip 
                     cursor={{fill: '#334155', opacity: 0.4}}

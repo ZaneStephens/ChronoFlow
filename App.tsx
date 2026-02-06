@@ -643,8 +643,10 @@ const InnerApp: React.FC = () => {
                   onStartTimer={handleStartTimer}
                   onStopTimer={handleStopClick}
                   clients={clients}
-                />
-                <WeekView sessions={sessions} tasks={tasks} clients={clients} />
+                >
+                  <WeekView sessions={sessions} tasks={tasks} clients={clients} section="overview" />
+                </Dashboard>
+                <WeekView sessions={sessions} tasks={tasks} clients={clients} section="heatmap" />
               </>
             )}
             {view === ViewMode.CLIENTS && (

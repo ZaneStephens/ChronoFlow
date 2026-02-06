@@ -6,9 +6,10 @@ interface WeekViewProps {
   sessions: TimerSession[];
   tasks: Task[];
   clients: Client[];
+  section?: 'overview' | 'heatmap';
 }
 
-const WeekView: React.FC<WeekViewProps> = ({ sessions, tasks, clients }) => {
+const WeekView: React.FC<WeekViewProps> = ({ sessions, tasks, clients, section }) => {
   const [weekOffset, setWeekOffset] = useState(0);
   const [heatmapMonth, setHeatmapMonth] = useState(() => {
     const now = new Date();
@@ -178,10 +179,13 @@ const WeekView: React.FC<WeekViewProps> = ({ sessions, tasks, clients }) => {
     return streak;
   }, [sessions]);
 
+  const showOverview = !section || section === 'overview';
+  const showHeatmap = !section || section === 'heatmap';
+
   return (
     <div className="space-y-6 px-6 pb-6">
       {/* Week Overview */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+      {showOverview && <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Calendar size={20} className="text-indigo-400" />
@@ -298,10 +302,10 @@ const WeekView: React.FC<WeekViewProps> = ({ sessions, tasks, clients }) => {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Monthly Heatmap */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+      {showHeatmap && <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <TrendingUp size={20} className="text-emerald-400" />
@@ -368,7 +372,7 @@ const WeekView: React.FC<WeekViewProps> = ({ sessions, tasks, clients }) => {
           <div className="w-3 h-3 rounded-sm bg-indigo-500" />
           <span className="text-[10px] text-slate-500">More</span>
         </div>
-      </div>
+      </div>}
     </div>
   );
 };
