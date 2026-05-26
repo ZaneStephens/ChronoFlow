@@ -266,10 +266,12 @@ const InnerApp: React.FC = () => {
   };
 
   const localStopRequest = (timer: ActiveTimer) => {
-    if (timer.subtaskId && timer.taskId) {
-      // Auto finalize if subtask
-      const sub = subtasks.find(s => s.id === timer.subtaskId);
-      finalizeSession(timer, sub?.title || '', Date.now());
+    if (timer.taskId || timer.subtaskId) {
+      // Already allocated — auto-finalize with the task/subtask context
+      const subtitle = timer.subtaskId
+        ? (subtasks.find(s => s.id === timer.subtaskId)?.title || '')
+        : (tasks.find(t => t.id === timer.taskId)?.title || '');
+      finalizeSession(timer, subtitle, Date.now());
       // pendingTimerStart will be handled by the useEffect above once activeTimer becomes null
     } else {
       setTimerToStop(timer);

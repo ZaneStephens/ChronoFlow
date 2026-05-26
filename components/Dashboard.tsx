@@ -107,6 +107,18 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, projects = [], se
     return data;
   }, [clients, tasks, sessions, activeTimer, validActiveDuration]);
 
+  const formatDuration = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
+  };
+
+  const stripHtml = (html: string) => {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  };
+
   const [insightsClientId, setInsightsClientId] = useState('');
 
   // ── Client Insights Data ──
@@ -197,18 +209,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, projects = [], se
 
     return { topTasks, keywords, microTasking, runawayTasks, activeRisks, stuckTasks };
   }, [tasks, sessions, clients, projects, insightsClientId, stripHtml]);
-
-  const formatDuration = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
-  };
-
-  const stripHtml = (html: string) => {
-    const tmp = document.createElement("DIV");
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || "";
-  };
 
   const StatCard = ({ title, value, icon: Icon, bgColor, textColor, subtext }: { title: string, value: string | number, icon: any, bgColor: string, textColor: string, subtext?: string }) => (
     <div className="bg-slate-800 border border-slate-700 p-6 rounded-xl flex items-start justify-between">
