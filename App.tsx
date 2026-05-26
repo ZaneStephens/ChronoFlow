@@ -91,6 +91,29 @@ const InnerApp: React.FC = () => {
     }
   }, []);
 
+  // ── Auto-backup reminder (every 14 days) ──
+  useEffect(() => {
+    const BACKUP_INTERVAL_DAYS = 14;
+    const key = 'lastBackupReminder';
+    const lastReminder = localStorage.getItem(key);
+    const now = Date.now();
+
+    if (!lastReminder) {
+      // First show — gentle intro
+      localStorage.setItem(key, String(now));
+      return;
+    }
+
+    const daysSince = (now - parseInt(lastReminder)) / (1000 * 60 * 60 * 24);
+    if (daysSince >= BACKUP_INTERVAL_DAYS) {
+      showToast(
+        'Backup reminder: Export your data from the sidebar menu to avoid losing tracked time.',
+        'info'
+      );
+      localStorage.setItem(key, String(now));
+    }
+  }, [showToast]);
+
   // --- Keyboard Shortcuts (Teams-iframe safe — no Ctrl+ combos) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -635,14 +658,12 @@ const InnerApp: React.FC = () => {
           <>
             {view === ViewMode.DASHBOARD && (
               <>
-                <Dashboard
+<Dashboard
                   tasks={tasks}
                   sessions={sessions}
                   activeTimer={activeTimer}
-                  plannedActivities={plannedActivities}
-                  onStartTimer={handleStartTimer}
-                  onStopTimer={handleStopClick}
                   clients={clients}
+                  projects={projects}
                 >
                   <WeekView sessions={sessions} tasks={tasks} clients={clients} section="overview" />
                 </Dashboard>

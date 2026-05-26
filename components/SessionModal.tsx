@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TimerSession, Task, Subtask, Client, Project } from '../types';
 import { X, Save, Clock, Trash2, AlertCircle, CheckSquare, Zap, FolderKanban, Bold, Italic, List } from 'lucide-react';
 
@@ -102,9 +102,100 @@ const SessionModal: React.FC<SessionModalProps> = ({
   const handleFormat = (command: string) => {
     document.execCommand(command, false, undefined);
     if (editorRef.current) {
-        setNotes(editorRef.current.innerHTML);
+        setNotes(sanitizeNotes(editorRef.current.innerHTML));
     }
   };
+
+  // ── Paste Sanitisation ──
+  const sanitizeNotes = (html: string): string => {
+    return html.replace(/&nbsp;/g, ' ');
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const plainText = e.clipboardData.getData('text/plain');
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) {
+      // Fallback: append at end
+      if (editorRef.current) {
+        editorRef.current.innerHTML += sanitizeNotes(escapeHtml(plainText));
+        setNotes(sanitizeNotes(editorRef.current.innerHTML));
+      }
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(document.createTextNode(plainText));
+    // Collapse cursor to end of inserted text
+    range.setStartAfter(range.endContainer);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    if (editorRef.current) {
+      setNotes(sanitizeNotes(editorRef.current.innerHTML));
+    }
+  };
+
+  const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(text));
+    return div.innerHTML;
+  };
+
+  // ── Fuzzy Client Matching ──
+  const STOP_WORDS = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
+    'it', 'its', 'this', 'that', 'these', 'those', 'not', 'no', 'group',
+    'solutions', 'services', 'limited', 'ltd', 'inc', 'llc', 'corp',
+  ]);
+
+  const matchClientFromText = (text: string, clientList: Client[]): Client | null => {
+    if (!text || clientList.length === 0) return null;
+
+    const cleanText = text.replace(/<[^>]*>/g, '').toLowerCase().trim();
+    if (!cleanText) return null;
+
+    const tokens = cleanText.split(/[^a-z0-9]/).filter(Boolean);
+
+    for (const client of clientList) {
+      if (!client.name) continue;
+      const clientName = client.name.toLowerCase();
+      const clientWords = clientName.split(/[^a-z0-9]/).filter(Boolean);
+
+      // 1. Exact / substring — does the description contain the full client name?
+      if (cleanText.includes(clientName)) return client;
+
+      // 2. Acronym — first letters of multi-word client name
+      if (clientWords.length >= 2) {
+        const acronym = clientWords.map(w => w[0]).join('').toLowerCase();
+        if (acronym.length >= 2) {
+          const matchingToken = tokens.find(t => t === acronym);
+          if (matchingToken) return client;
+        }
+      }
+
+      // 3. Significant keyword — any significant word from client name appears in text
+      const significantWords = clientWords.filter(w => w.length >= 4 && !STOP_WORDS.has(w));
+      for (const sigWord of significantWords) {
+        if (tokens.some(t => t === sigWord)) return client;
+      }
+    }
+
+    return null;
+  };
+
+  // Auto-detect client from notes for Quick Entry allocations
+  useEffect(() => {
+    if (allocType === 'quick' && !quickClientId && clients.length > 0) {
+      const plainText = notes.replace(/<[^>]*>/g, '').trim();
+      if (plainText.length > 0) {
+        const matched = matchClientFromText(notes, clients);
+        if (matched) {
+          setQuickClientId(matched.id);
+        }
+      }
+    }
+  }, [notes, allocType, quickClientId, clients]);
 
   const handleSave = () => {
     setError(null);
@@ -374,12 +465,13 @@ const SessionModal: React.FC<SessionModalProps> = ({
                         <List size={16} />
                     </button>
                 </div>
-                <div 
+<div 
                     ref={editorRef}
                     contentEditable 
                     className="p-3 min-h-[120px] outline-none text-white text-sm leading-relaxed max-h-[200px] overflow-y-auto"
-                    onInput={(e) => setNotes(e.currentTarget.innerHTML)}
-                    onBlur={(e) => setNotes(e.currentTarget.innerHTML)}
+                    onInput={(e) => setNotes(sanitizeNotes(e.currentTarget.innerHTML))}
+                    onBlur={(e) => setNotes(sanitizeNotes(e.currentTarget.innerHTML))}
+                    onPaste={handlePaste}
                 />
             </div>
             <p className="text-[10px] text-slate-500 mt-1">Supports rich text. Select text to format.</p>

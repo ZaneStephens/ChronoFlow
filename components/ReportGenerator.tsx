@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Client, Task, TimerSession, Subtask } from '../types';
 import { generateClientReport, generateTaskReport } from '../services/geminiService';
-import { FileText, Calendar, Loader2, Sparkles, Copy, Check, Download, Filter } from 'lucide-react';
+import { FileText, Calendar, Loader2, Sparkles, Copy, Check, Download, Filter, DollarSign, Clock, TrendingUp } from 'lucide-react';
 
 interface ReportGeneratorProps {
   clients: Client[];
@@ -20,9 +20,61 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ clients, tasks, sessi
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   
-  const [generatedReport, setGeneratedReport] = useState('');
+const [generatedReport, setGeneratedReport] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [outputTab, setOutputTab] = useState<'ai-report' | 'billing'>('ai-report');
+
+  // ── Billing Summary (6-min block rounding) ──
+  const billingData = useMemo(() => {
+    if (!selectedClientId || !startDate || !endDate) return null;
+
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime() + (24 * 60 * 60 * 1000) - 1;
+
+    const clientSessions = sessions.filter(s => {
+      if (!s.endTime) return false;
+      if (s.startTime < start || s.startTime > end) return false;
+      if (s.clientId === selectedClientId) return true;
+      if (s.taskId) {
+        const task = tasks.find(t => t.id === s.taskId);
+        return task?.clientId === selectedClientId;
+      }
+      return false;
+    });
+
+    // Group by task
+    const taskMap = new Map<string, { title: string; rawMinutes: number }>();
+    let unallocatedMinutes = 0;
+
+    clientSessions.forEach(s => {
+      const rawMin = (s.endTime! - s.startTime) / 60000;
+      if (s.taskId) {
+        const task = tasks.find(t => t.id === s.taskId);
+        const key = s.taskId;
+        if (!taskMap.has(key)) {
+          taskMap.set(key, { title: task?.title || 'Unknown Task', rawMinutes: 0 });
+        }
+        taskMap.get(key)!.rawMinutes += rawMin;
+      } else {
+        unallocatedMinutes += rawMin;
+      }
+    });
+
+    const SIX_MIN_BLOCKS = 6; // minutes per block
+    const taskRows = Array.from(taskMap.entries())
+      .map(([taskId, data]) => {
+        const blocks = Math.ceil(data.rawMinutes / SIX_MIN_BLOCKS);
+        return { taskId, title: data.title, rawMinutes: data.rawMinutes, blocks, billableHours: blocks * 0.1 };
+      })
+      .sort((a, b) => b.rawMinutes - a.rawMinutes);
+
+    const unallocatedBlocks = Math.ceil(unallocatedMinutes / SIX_MIN_BLOCKS);
+    const totalRawMinutes = clientSessions.reduce((acc, s) => acc + ((s.endTime! - s.startTime) / 60000), 0);
+    const totalBlocks = Math.ceil(totalRawMinutes / SIX_MIN_BLOCKS);
+
+    return { taskRows, unallocatedMinutes, unallocatedBlocks, totalRawMinutes, totalBlocks, billableHours: totalBlocks * 0.1 };
+  }, [selectedClientId, startDate, endDate, sessions, tasks]);
 
   // --- Logic for Sorting and Top Clients ---
   const sortedClients = useMemo(() => 
@@ -284,11 +336,31 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ clients, tasks, sessi
         {/* Output Panel */}
         <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-6 flex flex-col h-[600px]">
           <div className="flex justify-between items-center mb-4">
-             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-               <FileText className="text-emerald-400" size={20} />
-               Generated Report
-             </h3>
-             {generatedReport && (
+             <div className="flex gap-2">
+               <button
+                 onClick={() => setOutputTab('ai-report')}
+                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                   outputTab === 'ai-report'
+                     ? 'bg-indigo-600 text-white'
+                     : 'text-slate-400 hover:text-white bg-slate-700/50'
+                 }`}
+               >
+                 <Sparkles size={16} />
+                 AI Report
+               </button>
+               <button
+                 onClick={() => setOutputTab('billing')}
+                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                   outputTab === 'billing'
+                     ? 'bg-emerald-600 text-white'
+                     : 'text-slate-400 hover:text-white bg-slate-700/50'
+                 }`}
+               >
+                 <DollarSign size={16} />
+                 Billing Summary
+               </button>
+             </div>
+             {outputTab === 'ai-report' && generatedReport && (
                <button
                  onClick={copyToClipboard}
                  className="flex items-center gap-2 text-sm text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg transition-colors"
@@ -299,23 +371,89 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({ clients, tasks, sessi
              )}
           </div>
 
-          <div className="flex-1 bg-slate-900 rounded-lg border border-slate-700 p-4 overflow-y-auto font-mono text-sm leading-relaxed text-slate-300">
-            {generatedReport ? (
-               <div className="whitespace-pre-wrap">{generatedReport}</div>
+          <div className="flex-1 bg-slate-900 rounded-lg border border-slate-700 p-4 overflow-y-auto text-sm leading-relaxed text-slate-300">
+            {outputTab === 'ai-report' ? (
+              <>
+                {generatedReport ? (
+                   <div className="whitespace-pre-wrap font-mono">{generatedReport}</div>
+                ) : (
+                   <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                     {isGenerating ? (
+                        <div className="text-center space-y-3">
+                           <Loader2 className="animate-spin mx-auto text-indigo-500" size={40} />
+                           <p className="animate-pulse">Consulting Gemini AI...</p>
+                        </div>
+                     ) : (
+                        <>
+                           <FileText size={48} className="mb-4 opacity-20" />
+                           <p>Select a client and date range, then generate a report.</p>
+                        </>
+                     )}
+                   </div>
+                )}
+              </>
             ) : (
-               <div className="h-full flex flex-col items-center justify-center text-slate-600">
-                 {isGenerating ? (
-                    <div className="text-center space-y-3">
-                       <Loader2 className="animate-spin mx-auto text-indigo-500" size={40} />
-                       <p className="animate-pulse">Consulting Gemini AI...</p>
-                    </div>
-                 ) : (
-                    <>
-                       <FileText size={48} className="mb-4 opacity-20" />
-                       <p>Select a client and/or task to generate a report.</p>
-                    </>
-                 )}
-               </div>
+              <>
+                {billingData ? (
+                  <div className="space-y-4">
+                    {billingData.taskRows.length === 0 && billingData.unallocatedMinutes === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                        <Clock size={48} className="mb-4 opacity-20" />
+                        <p>No tracked sessions for this period.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Table Header */}
+                        <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider px-2 pb-2 border-b border-slate-700">
+                          <div className="col-span-5">Task</div>
+                          <div className="col-span-2 text-right">Raw Min</div>
+                          <div className="col-span-2 text-right">6-min Blocks</div>
+                          <div className="col-span-3 text-right">Billable Hours</div>
+                        </div>
+
+                        {/* Task Rows */}
+                        {billingData.taskRows.map(row => (
+                          <div key={row.taskId} className="grid grid-cols-12 gap-2 text-sm px-2 py-1.5 hover:bg-slate-800/50 rounded">
+                            <div className="col-span-5 text-slate-200 truncate" title={row.title}>{row.title}</div>
+                            <div className="col-span-2 text-right text-slate-400 font-mono">{Math.round(row.rawMinutes)}</div>
+                            <div className="col-span-2 text-right text-white font-mono font-bold">{row.blocks}</div>
+                            <div className="col-span-3 text-right text-emerald-400 font-mono font-bold">{row.billableHours.toFixed(1)}</div>
+                          </div>
+                        ))}
+
+                        {/* Unallocated row */}
+                        {billingData.unallocatedMinutes > 0 && (
+                          <div className="grid grid-cols-12 gap-2 text-sm px-2 py-1.5 bg-slate-800/30 rounded">
+                            <div className="col-span-5 text-slate-400 italic">Unallocated / Quick</div>
+                            <div className="col-span-2 text-right text-slate-400 font-mono">{Math.round(billingData.unallocatedMinutes)}</div>
+                            <div className="col-span-2 text-right text-white font-mono">{billingData.unallocatedBlocks}</div>
+                            <div className="col-span-3 text-right text-emerald-400 font-mono">{(billingData.unallocatedBlocks * 0.1).toFixed(1)}</div>
+                          </div>
+                        )}
+
+                        {/* Total */}
+                        <div className="grid grid-cols-12 gap-2 text-sm px-2 py-2 mt-2 border-t border-indigo-500/30 bg-indigo-500/5 rounded-b">
+                          <div className="col-span-5 text-white font-bold">Total</div>
+                          <div className="col-span-2 text-right text-white font-mono font-bold">{Math.round(billingData.totalRawMinutes)}</div>
+                          <div className="col-span-2 text-right text-indigo-300 font-mono font-bold text-base">{billingData.totalBlocks}</div>
+                          <div className="col-span-3 text-right text-emerald-300 font-mono font-bold text-base">{billingData.billableHours.toFixed(1)}h</div>
+                        </div>
+
+                        {/* Info note */}
+                        <p className="text-xs text-slate-500 mt-4 flex items-start gap-1">
+                          <Clock size={12} className="mt-0.5 shrink-0" />
+                          Rounded up to the nearest 6-minute block (MSP billing standard). 1 block = 0.1 hours.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                    <DollarSign size={48} className="mb-4 opacity-20" />
+                    <p>Select a client and date range to view billing summary.</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

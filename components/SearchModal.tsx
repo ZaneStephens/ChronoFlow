@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Task, TimerSession, Client, Project, Rock, ViewMode } from '../types';
-import { Search, X, Calendar, Clock, FileText, Hash } from 'lucide-react';
+import { Search, X, Calendar, Clock, FileText, Hash, FolderKanban, Target } from 'lucide-react';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -15,7 +15,13 @@ interface SearchModalProps {
 
 const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessions = [], clients, projects = [], rocks = [], onNavigate }) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<{ type: 'task' | 'session', item: any, score: number }[]>([]);
+  const [results, setResults] = useState<{ type: 'task' | 'session' | 'project' | 'rock', item: any, score: number, matchedOn?: string }[]>([]);
+
+  const stripHtml = (html: string) => {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -31,39 +37,70 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessi
     }
 
     const lowerQuery = query.toLowerCase();
-    const hits: { type: 'task' | 'session', item: any, score: number }[] = [];
+    const hits: { type: 'task' | 'session' | 'project' | 'rock', item: any, score: number, matchedOn?: string }[] = [];
 
     // Search Tasks
     tasks.forEach(task => {
       let score = 0;
-      if (task.title.toLowerCase().includes(lowerQuery)) score += 10;
-      if (task.ticketNumber && task.ticketNumber.toLowerCase().includes(lowerQuery)) score += 15;
-      if (task.description && task.description.toLowerCase().includes(lowerQuery)) score += 5;
-      
-      if (score > 0) {
-        hits.push({ type: 'task', item: task, score });
-      }
+      let matchedOn: string | undefined;
+      if (task.title.toLowerCase().includes(lowerQuery)) { score += 10; matchedOn = task.title; }
+      if (task.ticketNumber && task.ticketNumber.toLowerCase().includes(lowerQuery)) { score += 15; matchedOn = task.ticketNumber; }
+      if (task.description && task.description.toLowerCase().includes(lowerQuery)) { score += 5; matchedOn = task.description; }
+      if (score > 0) hits.push({ type: 'task', item: task, score, matchedOn });
     });
 
-    // Search Sessions (Notes)
+    // Search Sessions — search stripped HTML notes
     sessions.forEach(session => {
-       let score = 0;
-       // We need to check stripHtml content too, but checking raw HTML string is usually fine for search
-       if (session.notes && session.notes.toLowerCase().includes(lowerQuery)) score += 10;
-       if (session.customTitle && session.customTitle.toLowerCase().includes(lowerQuery)) score += 10;
-       
-       if (score > 0) {
-         hits.push({ type: 'session', item: session, score });
-       }
+      let score = 0;
+      let matchedOn: string | undefined;
+      if (session.customTitle && session.customTitle.toLowerCase().includes(lowerQuery)) {
+        score += 10;
+        matchedOn = session.customTitle;
+      }
+      if (session.notes) {
+        const plainText = stripHtml(session.notes);
+        if (plainText.toLowerCase().includes(lowerQuery)) {
+          score += 12; // Higher weight for note matches
+          if (!matchedOn) matchedOn = plainText;
+        }
+      }
+      if (score > 0) hits.push({ type: 'session', item: session, score, matchedOn });
+    });
+
+    // Search Projects
+    projects.forEach(project => {
+      let score = 0;
+      let matchedOn: string | undefined;
+      if (project.title.toLowerCase().includes(lowerQuery)) { score += 10; matchedOn = project.title; }
+      if (project.description.toLowerCase().includes(lowerQuery)) { score += 5; matchedOn = project.description; }
+      if (project.tags?.some(t => t.toLowerCase().includes(lowerQuery))) score += 3;
+      if (score > 0) hits.push({ type: 'project', item: project, score, matchedOn });
+    });
+
+    // Search Rocks
+    rocks.forEach(rock => {
+      let score = 0;
+      let matchedOn: string | undefined;
+      if (rock.title.toLowerCase().includes(lowerQuery)) { score += 10; matchedOn = rock.title; }
+      if (rock.description.toLowerCase().includes(lowerQuery)) { score += 5; matchedOn = rock.description; }
+      if (score > 0) hits.push({ type: 'rock', item: rock, score, matchedOn });
     });
 
     setResults(hits.sort((a, b) => b.score - a.score));
-  }, [query, tasks, sessions]);
+  }, [query, tasks, sessions, projects, rocks]);
 
-  const stripHtml = (html: string) => {
-    const tmp = document.createElement("DIV");
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || "";
+  const highlightMatch = (text: string): React.ReactNode => {
+    if (!query.trim()) return text;
+    const lowerText = text.toLowerCase();
+    const idx = lowerText.indexOf(query.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <span className="text-indigo-300 bg-indigo-500/20 rounded px-0.5">{text.slice(idx, idx + query.length)}</span>
+        {text.slice(idx + query.length)}
+      </>
+    );
   };
 
   if (!isOpen) return null;
@@ -107,13 +144,42 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessi
                         {client && <span className="text-xs text-slate-400">{client.name}</span>}
                         {task.ticketNumber && <span className="text-xs font-mono text-slate-500 bg-slate-800 px-1 rounded flex items-center gap-0.5"><Hash size={10}/>{task.ticketNumber}</span>}
                      </div>
-                     <h4 className="text-white font-medium">{task.title}</h4>
+                     <h4 className="text-white font-medium">{highlightMatch(task.title)}</h4>
                      {task.description && <p className="text-sm text-slate-500 truncate mt-1">{task.description}</p>}
+                  </div>
+                );
+              } else if (hit.type === 'project') {
+                const project = hit.item as Project;
+                const client = clients.find(c => c.id === project.clientId);
+                return (
+                  <div key={`p-${project.id}`} className="p-3 hover:bg-slate-800 rounded-lg group border border-transparent hover:border-slate-700 transition-colors">
+                     <div className="flex items-center gap-2 mb-1">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-500/20 text-blue-300"><FolderKanban size={12} className="inline mr-0.5" />Project</span>
+                        {client && <span className="text-xs text-slate-400">{client.name}</span>}
+                        <span className={`text-[10px] font-medium uppercase ${project.status === 'active' ? 'text-emerald-400' : project.status === 'planning' ? 'text-amber-400' : 'text-slate-500'}`}>{project.status}</span>
+                     </div>
+                     <h4 className="text-white font-medium">{highlightMatch(project.title)}</h4>
+                     {project.description && <p className="text-sm text-slate-500 truncate mt-1">{project.description}</p>}
+                  </div>
+                );
+              } else if (hit.type === 'rock') {
+                const rock = hit.item as Rock;
+                return (
+                  <div key={`r-${rock.id}`} className="p-3 hover:bg-slate-800 rounded-lg group border border-transparent hover:border-slate-700 transition-colors">
+                     <div className="flex items-center gap-2 mb-1">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-500/20 text-purple-300"><Target size={12} className="inline mr-0.5" />Rock</span>
+                        <span className="text-xs text-slate-400">{rock.quarter}</span>
+                        <span className={`text-[10px] font-medium uppercase ${rock.status === 'on-track' ? 'text-emerald-400' : rock.status === 'at-risk' ? 'text-amber-400' : rock.status === 'off-track' ? 'text-red-400' : 'text-slate-500'}`}>{rock.status}</span>
+                     </div>
+                     <h4 className="text-white font-medium">{highlightMatch(rock.title)}</h4>
+                     {rock.description && <p className="text-sm text-slate-500 truncate mt-1">{rock.description}</p>}
                   </div>
                 );
               } else {
                 const session = hit.item as TimerSession;
                 const task = tasks.find(t => t.id === session.taskId);
+                const matchedText = typeof hit.matchedOn === 'string' ? hit.matchedOn : '';
+                const preview = session.notes ? stripHtml(session.notes) : '';
                 return (
                    <div key={`s-${session.id}`} className="p-3 hover:bg-slate-800 rounded-lg group border border-transparent hover:border-slate-700 transition-colors">
                      <div className="flex items-center gap-2 mb-1">
@@ -124,10 +190,10 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, tasks, sessi
                      <div className="text-sm text-slate-200 mb-1">
                         {task ? task.title : (session.customTitle || 'Quick Log')}
                      </div>
-                     {session.notes && (
+                     {preview && (
                        <div className="flex items-start gap-2 text-sm text-slate-400 bg-slate-800/50 p-2 rounded">
                           <FileText size={14} className="mt-0.5 shrink-0" />
-                          <span className="line-clamp-2">{stripHtml(session.notes)}</span>
+                          <span className="line-clamp-2">{highlightMatch(preview)}</span>
                        </div>
                      )}
                    </div>

@@ -59,6 +59,7 @@ export interface PlannedActivity {
   durationMinutes: number; 
   type: 'task' | 'quick';
   taskId?: string; 
+  subtaskId?: string; // Target a specific subtask within a task
   clientId?: string; 
   quickTitle?: string; 
   isLogged: boolean; 

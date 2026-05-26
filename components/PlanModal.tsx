@@ -523,13 +523,19 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
             )}
             </div>
 
-            <div className="p-4 bg-slate-900/50 border-t border-slate-700 flex justify-end gap-3 shrink-0">
+            <div className="p-4 bg-slate-900/50 border-t border-slate-700 flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2">
+              {!timeStr && <span className="text-xs text-amber-400">* Time required</span>}
+              {type === 'task' && !selectedTaskId && timeStr && <span className="text-xs text-amber-400">* Select a task</span>}
+              {type === 'quick' && !quickTitle && timeStr && <span className="text-xs text-amber-400">* Enter a title</span>}
+            </div>
+            <div className="flex gap-3">
             <button onClick={onClose} className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">
                 Cancel
             </button>
             <button
                 onClick={handleSubmit}
-                disabled={(type === 'task' && !selectedTaskId) || (type === 'quick' && !quickTitle)}
+                disabled={!timeStr || (type === 'task' && !selectedTaskId) || (type === 'quick' && !quickTitle)}
                 className={`px-6 py-2 text-white font-medium rounded-lg shadow-lg flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                 type === 'task' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-900/20' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20'
                 }`}
@@ -537,6 +543,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onSave, onDelete
                 {editingPlan ? <Edit2 size={18} /> : <CalendarPlus size={18} />}
                 {editingPlan ? 'Update Plan' : (tab === 'recurring' ? 'Create Rule' : 'Add Plan')}
             </button>
+            </div>
             </div>
         </div>
       </div>

@@ -16,7 +16,7 @@ interface TimerContextType {
     startTimer: (taskId?: string, subtaskId?: string, startTimeOverride?: number) => void;
     stopTimerRequest: (timer: ActiveTimer) => void; // Request to stop (opens modal often)
     cancelActiveTimer: () => void;
-    finalizeSession: (timer: ActiveTimer, notes: string, rawEndTime: number, extraUpdates?: Partial<TimerSession>) => void;
+finalizeSession: (timer: ActiveTimer, notes: string, rawEndTime: number, extraUpdates?: Partial<TimerSession>) => void;
 
     // CRUD
     addSession: (session: TimerSession) => void;
@@ -24,11 +24,6 @@ interface TimerContextType {
     deleteSession: (sessionId: string) => void;
 
     importSessionData: (data: any, strategy: 'merge' | 'overwrite') => void;
-
-    // External State Trigger (legacy support or new architecture)
-    // We might expose state booleans here too if the modal logic lives here or up a level. 
-    // Ideally, TimerContext handles logic, but Modals are UI. 
-    // We'll expose `pendingTimerStop` or similar if we want the UI elsewhere.
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
@@ -162,23 +157,22 @@ export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     // CRUD
-    const addSession = (session: TimerSession) => {
+const addSession = (session: TimerSession) => {
         setSessions(prev => [...prev, session]);
-        // Also need to update task totals if manual entry
+        // Update task/subtask totals for manual entries
         if (session.endTime && session.startTime) {
             const duration = (session.endTime - session.startTime) / 1000;
-            if (session.taskId) {
+            if (session.subtaskId) {
+                const sub = subtasks.find(s => s.id === session.subtaskId);
+                if (sub) updateSubtask({ ...sub, totalTime: sub.totalTime + duration });
+            } else if (session.taskId) {
                 const task = tasks.find(t => t.id === session.taskId);
                 if (task) updateTask({ ...task, totalTime: task.totalTime + duration });
             }
         }
     };
 
-    const updateSession = (sessionId: string, updates: Partial<TimerSession>) => {
-        // Complex logic from App.tsx handleSessionSave needs to effectively move here 
-        // OR we just expose raw access.
-        // Given the refactor scale, let's try to keep the complex logic in the Context to clean UI.
-
+const updateSession = (sessionId: string, updates: Partial<TimerSession>) => {
         const oldSession = sessions.find(s => s.id === sessionId);
         if (!oldSession) return;
 
@@ -186,38 +180,59 @@ export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const newEnd = updates.endTime !== undefined ? updates.endTime : (oldSession.endTime || Date.now());
         const newDuration = newEnd - newStart;
         const oldDuration = (oldSession.endTime || Date.now()) - oldSession.startTime;
-        const durationDiff = Math.floor((newDuration - oldDuration) / 1000);
+        const newDurationSec = Math.floor(newDuration / 1000);
+        const oldDurationSec = Math.floor(oldDuration / 1000);
 
-        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, ...updates } : s));
+        const taskChanged = updates.taskId !== undefined && updates.taskId !== oldSession.taskId;
+        const subtaskChanged = updates.subtaskId !== undefined && updates.subtaskId !== oldSession.subtaskId;
 
-        // Task Update Logic
-        // Implementation Note: This simplifies the App.tsx logic slightly for readability.
-        // We trust the provided logic in App.tsx was correct and replicate the effect.
+        setSessions(prev => prev.map(s => {
+            if (s.id === sessionId) {
+                const merged = { ...s, ...updates };
+                if (taskChanged && updates.subtaskId === undefined) {
+                    delete merged.subtaskId;
+                }
+                return merged;
+            }
+            return s;
+        }));
 
-        const isSameTask = (!updates.taskId || updates.taskId === oldSession.taskId);
+        // --- Remove time from old allocation ---
+        if (taskChanged || subtaskChanged) {
+            // Full reallocation: remove all old time
+            if (oldSession.subtaskId) {
+                const oldSub = subtasks.find(s => s.id === oldSession.subtaskId);
+                if (oldSub) updateSubtask({ ...oldSub, totalTime: Math.max(0, oldSub.totalTime - oldDurationSec) });
+            } else if (oldSession.taskId) {
+                const oldTask = tasks.find(t => t.id === oldSession.taskId);
+                if (oldTask) updateTask({ ...oldTask, totalTime: Math.max(0, oldTask.totalTime - oldDurationSec) });
+            }
+        }
 
-        if (isSameTask && oldSession.taskId) {
+        // --- Add time to new allocation ---
+        if (taskChanged || subtaskChanged) {
+            // Adding to new target
+            const targetTaskId = updates.taskId !== undefined ? updates.taskId : oldSession.taskId;
+            const targetSubtaskId = updates.subtaskId !== undefined ? updates.subtaskId : (taskChanged ? undefined : oldSession.subtaskId);
+
+            if (targetSubtaskId) {
+                const newSub = subtasks.find(s => s.id === targetSubtaskId);
+                if (newSub) updateSubtask({ ...newSub, totalTime: newSub.totalTime + newDurationSec });
+            } else if (targetTaskId) {
+                const newTask = tasks.find(t => t.id === targetTaskId);
+                if (newTask) updateTask({ ...newTask, totalTime: newTask.totalTime + newDurationSec });
+            }
+        } else {
+            // Same allocation: just adjust for duration change
+            const durationDiff = newDurationSec - oldDurationSec;
             if (durationDiff !== 0) {
                 if (oldSession.subtaskId) {
                     const sub = subtasks.find(s => s.id === oldSession.subtaskId);
-                    if (sub) updateSubtask({ ...sub, totalTime: sub.totalTime + durationDiff });
-                } else {
+                    if (sub) updateSubtask({ ...sub, totalTime: Math.max(0, sub.totalTime + durationDiff) });
+                } else if (oldSession.taskId) {
                     const task = tasks.find(t => t.id === oldSession.taskId);
-                    if (task) updateTask({ ...task, totalTime: task.totalTime + durationDiff });
+                    if (task) updateTask({ ...task, totalTime: Math.max(0, task.totalTime + durationDiff) });
                 }
-            }
-        } else if (updates.taskId !== undefined && updates.taskId !== oldSession.taskId) {
-            // Task Changed
-            const newSec = Math.floor(newDuration / 1000);
-            const oldSec = Math.floor(oldDuration / 1000);
-
-            if (oldSession.taskId) {
-                const oldTask = tasks.find(t => t.id === oldSession.taskId);
-                if (oldTask) updateTask({ ...oldTask, totalTime: Math.max(0, oldTask.totalTime - oldSec) });
-            }
-            if (updates.taskId) {
-                const newTask = tasks.find(t => t.id === updates.taskId);
-                if (newTask) updateTask({ ...newTask, totalTime: newTask.totalTime + newSec });
             }
         }
     };
