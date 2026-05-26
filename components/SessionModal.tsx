@@ -97,6 +97,52 @@ const SessionModal: React.FC<SessionModalProps> = ({
     }
   }, [isOpen, session, initialData, mode]);
 
+  // ── Fuzzy Client Matching (defined here so hooks are before early return) ──
+  const STOP_WORDS = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
+    'it', 'its', 'this', 'that', 'these', 'those', 'not', 'no', 'group',
+    'solutions', 'services', 'limited', 'ltd', 'inc', 'llc', 'corp',
+  ]);
+
+  const matchClientFromText = (text: string, clientList: Client[]): Client | null => {
+    if (!text || clientList.length === 0) return null;
+    const cleanText = text.replace(/<[^>]*>/g, '').toLowerCase().trim();
+    if (!cleanText) return null;
+    const tokens = cleanText.split(/[^a-z0-9]/).filter(Boolean);
+    for (const client of clientList) {
+      if (!client.name) continue;
+      const clientName = client.name.toLowerCase();
+      const clientWords = clientName.split(/[^a-z0-9]/).filter(Boolean);
+      if (cleanText.includes(clientName)) return client;
+      if (clientWords.length >= 2) {
+        const acronym = clientWords.map(w => w[0]).join('').toLowerCase();
+        if (acronym.length >= 2) {
+          const matchingToken = tokens.find(t => t === acronym);
+          if (matchingToken) return client;
+        }
+      }
+      const significantWords = clientWords.filter(w => w.length >= 4 && !STOP_WORDS.has(w));
+      for (const sigWord of significantWords) {
+        if (tokens.some(t => t === sigWord)) return client;
+      }
+    }
+    return null;
+  };
+
+  // Auto-detect client from notes for Quick Entry allocations
+  useEffect(() => {
+    if (allocType === 'quick' && !quickClientId && clients.length > 0) {
+      const plainText = notes.replace(/<[^>]*>/g, '').trim();
+      if (plainText.length > 0) {
+        const matched = matchClientFromText(notes, clients);
+        if (matched) {
+          setQuickClientId(matched.id);
+        }
+      }
+    }
+  }, [notes, allocType, quickClientId, clients]);
+
   if (!isOpen) return null;
 
   const handleFormat = (command: string) => {
@@ -140,62 +186,6 @@ const SessionModal: React.FC<SessionModalProps> = ({
     div.appendChild(document.createTextNode(text));
     return div.innerHTML;
   };
-
-  // ── Fuzzy Client Matching ──
-  const STOP_WORDS = new Set([
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-    'it', 'its', 'this', 'that', 'these', 'those', 'not', 'no', 'group',
-    'solutions', 'services', 'limited', 'ltd', 'inc', 'llc', 'corp',
-  ]);
-
-  const matchClientFromText = (text: string, clientList: Client[]): Client | null => {
-    if (!text || clientList.length === 0) return null;
-
-    const cleanText = text.replace(/<[^>]*>/g, '').toLowerCase().trim();
-    if (!cleanText) return null;
-
-    const tokens = cleanText.split(/[^a-z0-9]/).filter(Boolean);
-
-    for (const client of clientList) {
-      if (!client.name) continue;
-      const clientName = client.name.toLowerCase();
-      const clientWords = clientName.split(/[^a-z0-9]/).filter(Boolean);
-
-      // 1. Exact / substring — does the description contain the full client name?
-      if (cleanText.includes(clientName)) return client;
-
-      // 2. Acronym — first letters of multi-word client name
-      if (clientWords.length >= 2) {
-        const acronym = clientWords.map(w => w[0]).join('').toLowerCase();
-        if (acronym.length >= 2) {
-          const matchingToken = tokens.find(t => t === acronym);
-          if (matchingToken) return client;
-        }
-      }
-
-      // 3. Significant keyword — any significant word from client name appears in text
-      const significantWords = clientWords.filter(w => w.length >= 4 && !STOP_WORDS.has(w));
-      for (const sigWord of significantWords) {
-        if (tokens.some(t => t === sigWord)) return client;
-      }
-    }
-
-    return null;
-  };
-
-  // Auto-detect client from notes for Quick Entry allocations
-  useEffect(() => {
-    if (allocType === 'quick' && !quickClientId && clients.length > 0) {
-      const plainText = notes.replace(/<[^>]*>/g, '').trim();
-      if (plainText.length > 0) {
-        const matched = matchClientFromText(notes, clients);
-        if (matched) {
-          setQuickClientId(matched.id);
-        }
-      }
-    }
-  }, [notes, allocType, quickClientId, clients]);
 
   const handleSave = () => {
     setError(null);
