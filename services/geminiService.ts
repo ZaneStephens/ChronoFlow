@@ -1,10 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 const getAiClient = () => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing");
-  }
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Replace the env check with your hardcoded key
+  const apiKey = "AIzaSyCfgNrzMOeEzd9Mwv5h4-e1vAMiuyN8Q8c";
+  
+  return new GoogleGenAI({ apiKey });
 };
 
 const getMspContext = (isInternal: boolean, clientName?: string) => {
@@ -53,7 +53,7 @@ export const generateSubtasks = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -125,7 +125,7 @@ export const generateClientReport = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
     });
     return response.text;
@@ -179,7 +179,7 @@ export const generateTaskReport = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
     });
     return response.text;
@@ -220,7 +220,7 @@ export const generateProjectPlan = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -307,7 +307,7 @@ export const updateProjectPlan = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -378,7 +378,7 @@ export const generateRockPlan = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         systemInstruction: "You are a helpful assistant that outputs strict JSON. You value conciseness. You never include internal monologue, dates, or reasoning in the JSON fields. You return only the requested structured data.",
