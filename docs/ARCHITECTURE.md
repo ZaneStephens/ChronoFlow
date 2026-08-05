@@ -49,7 +49,7 @@ Dependencies resolve via **import maps** in `index.html` pointing to CDN URLs. T
 ├── index.tsx                  # ReactDOM.createRoot entry point
 ├── index.html                 # HTML shell with Tailwind CDN + import maps
 ├── types.ts                   # ALL TypeScript interfaces and enums
-├── vite.config.ts             # Vite config with API_KEY env injection
+├── vite.config.ts             # Vite development and build config
 ├── tsconfig.json              # TS config (jsx: react-jsx, bundler resolution)
 ├── package.json               # Dependency manifest (CDN-resolved)
 ├── metadata.json              # App metadata
@@ -84,8 +84,11 @@ Dependencies resolve via **import maps** in `index.html` pointing to CDN URLs. T
 │   └── TimerContext.tsx        # Active timer, sessions, finalization logic
 │
 ├── services/
-│   ├── geminiService.ts       # Google Gemini AI integration
+│   ├── geminiService.ts       # Browser client for the AI function
 │   └── storageService.ts      # IndexedDB persistence layer
+│
+├── netlify/functions/
+│   └── gemini.mts             # Server-side Google Gemini integration
 │
 └── docs/
     ├── ARCHITECTURE.md         # This file
@@ -225,7 +228,7 @@ User clicks Start → handleStartTimer()
 
 ## 8. AI Integration (`geminiService.ts`)
 
-Uses `@google/genai` with API key injected via Vite's `define` (`process.env.API_KEY`).
+The browser service sends generation requests to the `/api/gemini` Netlify Function. The function uses `@google/genai` and reads `API_KEY` only at runtime, so credentials are not bundled into the static site.
 
 ### Capabilities
 

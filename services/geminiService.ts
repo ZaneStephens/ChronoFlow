@@ -1,10 +1,31 @@
-import { GoogleGenAI, Type } from "@google/genai";
+const Type = {
+  ARRAY: "ARRAY",
+  INTEGER: "INTEGER",
+  OBJECT: "OBJECT",
+  STRING: "STRING"
+} as const;
 
 const getAiClient = () => {
-  // Replace the env check with your hardcoded key
-  const apiKey = "AIzaSyCfgNrzMOeEzd9Mwv5h4-e1vAMiuyN8Q8c";
-  
-  return new GoogleGenAI({ apiKey });
+  return {
+    models: {
+      generateContent: async (request: Record<string, unknown>) => {
+        const response = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(request)
+        });
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { error?: string } | null;
+          throw new Error(payload?.error || 'AI request failed.');
+        }
+
+        return response.json() as Promise<{ text?: string }>;
+      }
+    }
+  };
 };
 
 const getMspContext = (isInternal: boolean, clientName?: string) => {

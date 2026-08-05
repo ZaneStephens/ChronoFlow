@@ -41,16 +41,18 @@ A local-first time tracking and productivity app built for MSP IT professionals.
 npm install
 ```
 
-Set your Gemini API key in `.env.local`:
+Set your Gemini API key in the Netlify environment variables:
 
 ```
 API_KEY=your_gemini_api_key
 ```
 
+The key is read only by the Netlify Function at runtime and is never included in the browser bundle. For local AI development, use `netlify dev` so the `/api/gemini` route and environment variables are available.
+
 Start the dev server:
 
 ```bash
-npm run dev
+netlify dev
 ```
 
 ## Architecture
@@ -74,8 +76,10 @@ For AI agents working on this codebase, see [docs/AGENT_GUIDE.md](docs/AGENT_GUI
 ├── components/                 # UI components (18 files)
 ├── contexts/                   # React Context providers (3 files)
 ├── services/
-│   ├── geminiService.ts        # Google Gemini AI integration
+│   ├── geminiService.ts        # Browser client for the AI function
 │   └── storageService.ts       # IndexedDB persistence layer
+├── netlify/functions/
+│   └── gemini.mts              # Server-side Google Gemini integration
 └── docs/
     ├── ARCHITECTURE.md         # Technical architecture reference
     └── AGENT_GUIDE.md          # AI agent operational guide
