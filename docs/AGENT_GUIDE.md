@@ -171,10 +171,11 @@ The third argument to `showToast()` is the undo callback. The Toast component sh
 
 ### Add a new AI feature
 
-1. Add the function in `services/geminiService.ts`
-2. Include MSP context via `getMspContext(isInternal, clientName)`
-3. Use structured output schemas (`responseMimeType: 'application/json'` + `responseSchema`)
-4. Call it from the component (AI calls are one of the few places components may have side effects)
+1. Add the browser-facing wrapper and prompt in `services/geminiService.ts`
+2. Send inference requests through the `/api/gemini` Netlify Function
+3. Include MSP context via `getMspContext(isInternal, clientName)`
+4. Use structured output schemas (`responseMimeType: 'application/json'` + `responseSchema`)
+5. Call it from the component (AI calls are one of the few places components may have side effects)
 
 ---
 
@@ -208,7 +209,8 @@ Large files that require careful navigation:
 | `ProjectManager.tsx` | ~1050 | Three sub-views: list, create, detail |
 | `Timeline.tsx` | ~575 | Day timeline with drag-to-move, zoom |
 | `RockManager.tsx` | ~616 | Three sub-views: list, create, detail |
-| `geminiService.ts` | ~423 | Four AI functions with long prompts |
+| `geminiService.ts` | ~440 | Browser-side AI wrappers and prompts |
+| `netlify/functions/gemini.mts` | ~50 | Server-side Gemini credential boundary |
 
 ---
 
