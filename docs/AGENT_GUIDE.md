@@ -12,7 +12,7 @@ Before making changes, verify:
 1. **Read `types.ts`** — all interfaces are defined here. Never create types inline.
 2. **Read the target component's props interface** — props are passed from `App.tsx`, not from context hooks (except rare cases).
 3. **Check `App.tsx`** (~870 lines) — this is the orchestration layer. All view rendering, modal state, and handler wiring lives here.
-4. **No `node_modules`** — dependencies load via CDN import maps in `index.html`. TS "Cannot find module" errors are false positives.
+4. **Install dependencies** — run `npm ci`; dependencies and Tailwind CSS are bundled by Vite. Run `npm run typecheck`, `npm test`, and `npm run build`. Do not dismiss module errors as CDN false positives.
 5. **IndexedDB, not localStorage** — all persistence is through `services/storageService.ts`. Do NOT add new `localStorage` calls.
 
 ---
@@ -72,16 +72,16 @@ const isHydrated = useRef(false);
 
 // Hydrate on mount
 useEffect(() => {
-    getStore<T[]>('storeName').then(data => {
-        setState(data ?? defaults);
-        isHydrated.current = true;
-    });
+  getStore<T[]>("storeName").then((data) => {
+    setState(data ?? defaults);
+    isHydrated.current = true;
+  });
 }, []);
 
 // Write on every change (skip until hydrated)
 useEffect(() => {
-    if (!isHydrated.current) return;
-    setStore('storeName', stateValue).catch(console.error);
+  if (!isHydrated.current) return;
+  setStore("storeName", stateValue).catch(console.error);
 }, [stateValue]);
 ```
 
@@ -126,21 +126,27 @@ This is a core business rule. Never change or bypass it.
 ## Common Pitfalls
 
 ### ❌ Adding localStorage calls
+
 All persistence goes through `storageService.ts`. The only remaining localStorage usage is `hasSeenTutorial` (a UI flag in App.tsx).
 
 ### ❌ Using Ctrl+ keyboard shortcuts
+
 The app runs in a Teams iframe. `Ctrl+K`, `Ctrl+P`, etc. are intercepted by Teams. Use single-key shortcuts only (`/`, `Escape`), guarded by input focus checks.
 
 ### ❌ Using browser Notification API
+
 `Notification.requestPermission()` fails in iframes. Use `showToast()` from `useNotification()` for all user alerts.
 
 ### ❌ Modifying component props without updating App.tsx
+
 Every prop change must be mirrored in the JSX call site in App.tsx. Use `get_errors` after any prop interface change to catch mismatches.
 
 ### ❌ Creating new type definitions inline
+
 All types go in `types.ts`. The only exception is component-local prop interfaces (defined in the component file itself).
 
 ### ❌ Forgetting `p-6` on new views
+
 Every main view component must have `p-6` (or equivalent padding) on its root container element. Without it, content touches the sidebar edge.
 
 ---
@@ -159,11 +165,11 @@ Every main view component must have `p-6` (or equivalent padding) on its root co
 ```typescript
 // In App.tsx handler:
 const handleDeleteThing = (id: string) => {
-    const snapshot = things.find(t => t.id === id);
-    deleteThing(id);
-    if (snapshot) {
-        showToast('Deleted', 'success', () => addThing(snapshot));
-    }
+  const snapshot = things.find((t) => t.id === id);
+  deleteThing(id);
+  if (snapshot) {
+    showToast("Deleted", "success", () => addThing(snapshot));
+  }
 };
 ```
 
@@ -181,20 +187,20 @@ The third argument to `showToast()` is the undo callback. The Toast component sh
 
 ## Testing & Verification
 
-### No test framework is set up. Verify changes by:
+### Automated checks
+
+Use the node test runner through `npm test` (tsx, jsdom, React Testing Library and fake IndexedDB). Tests live in `tests/`. See `docs/REDESIGN.md` for the protected backup and CSV contracts.
+
+Also verify changes by:
 
 1. **`get_errors`** — Check all modified files for TypeScript errors
 2. **Prop alignment** — After any interface change, verify App.tsx passes correct props
 3. **Storage round-trip** — New data fields should survive a page refresh
 4. **Teams constraints** — No Ctrl+ shortcuts, no Notification API, no window.open
 
-### Known false positives
+### TypeScript errors
 
-The TS language server may report `Cannot find module 'react'` or `Cannot find module 'lucide-react'` on files it hasn't cached yet. These are caused by:
-- `tsconfig.json` having `"types": ["node"]` which limits type resolution
-- No `node_modules` directory (CDN import maps handle runtime resolution)
-
-These errors do **not** affect the built application.
+Dependencies are installed locally. TypeScript and build errors must be resolved before handoff.
 
 ---
 
@@ -202,25 +208,25 @@ These errors do **not** affect the built application.
 
 Large files that require careful navigation:
 
-| File | Lines | Notes |
-|------|-------|-------|
-| `App.tsx` | ~870 | Orchestration hub — read in sections |
-| `TaskBoard.tsx` | ~765 | Kanban board — complex drag/filter logic |
-| `ProjectManager.tsx` | ~1050 | Three sub-views: list, create, detail |
-| `Timeline.tsx` | ~575 | Day timeline with drag-to-move, zoom |
-| `RockManager.tsx` | ~616 | Three sub-views: list, create, detail |
-| `geminiService.ts` | ~440 | Browser-side AI wrappers and prompts |
-| `netlify/functions/gemini.mts` | ~50 | Server-side Gemini credential boundary |
+| File                           | Lines | Notes                                    |
+| ------------------------------ | ----- | ---------------------------------------- |
+| `App.tsx`                      | ~870  | Orchestration hub — read in sections     |
+| `TaskBoard.tsx`                | ~765  | Kanban board — complex drag/filter logic |
+| `ProjectManager.tsx`           | ~1050 | Three sub-views: list, create, detail    |
+| `Timeline.tsx`                 | ~575  | Day timeline with drag-to-move, zoom     |
+| `RockManager.tsx`              | ~616  | Three sub-views: list, create, detail    |
+| `geminiService.ts`             | ~440  | Browser-side AI wrappers and prompts     |
+| `netlify/functions/gemini.mts` | ~50   | Server-side Gemini credential boundary   |
 
 ---
 
 ## Storage Capacity Reference
 
-| Storage Type | Typical Limit | ChronoFlow Use |
-|-------------|--------------|----------------|
-| localStorage | 5–10 MB | **No longer used** (migrated) |
-| IndexedDB | 50%+ of disk | Primary storage — effectively unlimited |
-| Import map CDN | N/A | Dependencies loaded from aistudiocdn.com |
+| Storage Type   | Typical Limit | ChronoFlow Use                           |
+| -------------- | ------------- | ---------------------------------------- |
+| localStorage   | 5–10 MB       | **No longer used** (migrated)            |
+| IndexedDB      | 50%+ of disk  | Primary storage — effectively unlimited  |
+| Import map CDN | N/A           | Dependencies loaded from aistudiocdn.com |
 
 ### Session Growth Estimate
 

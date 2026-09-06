@@ -1,308 +1,281 @@
-
-import React, { useState } from 'react';
-import { Client } from '../types';
-import { Plus, Trash2, Briefcase, Mail, User, FileText, ChevronDown, ChevronUp, Edit2, X, Save, ShieldCheck } from 'lucide-react';
-
+import React, { useState } from "react";
+import { Client } from "../types";
+import {
+  Plus,
+  Search,
+  Mail,
+  UserRound,
+  Pencil,
+  Trash2,
+  Users,
+} from "lucide-react";
+import Dialog from "./ui/Dialog";
 interface ClientManagerProps {
   clients: Client[];
-  onAddClient: (client: Omit<Client, 'id'>) => void;
+  onAddClient: (client: Omit<Client, "id">) => void;
   onUpdateClient: (client: Client) => void;
   onDeleteClient: (id: string) => void;
 }
-
-const ClientManager: React.FC<ClientManagerProps> = ({ clients, onAddClient, onUpdateClient, onDeleteClient }) => {
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [name, setName] = useState('');
-  const [color, setColor] = useState('#6366f1');
+export default function ClientManager({
+  clients,
+  onAddClient,
+  onUpdateClient,
+  onDeleteClient,
+}: ClientManagerProps) {
+  const [query, setQuery] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Client | null>(null);
+  const [deleting, setDeleting] = useState<Client | null>(null);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState("#62835c");
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [services, setServices] = useState("");
   const [isInternal, setIsInternal] = useState(false);
-  
-  // Optional Fields
-  const [contactName, setContactName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
-  const [services, setServices] = useState('');
-
-  const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
-
-  // Sort clients A-Z
-  const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
-
-  const handleEditClick = (client: Client) => {
-    setEditingId(client.id);
-    setName(client.name);
-    setColor(client.color);
-    setIsInternal(client.isInternal || false);
-    setContactName(client.contactName || '');
-    setContactEmail(client.contactEmail || '');
-    setServices(client.services || '');
-    
-    // Scroll to top to see form
-    const formElement = document.getElementById('client-form');
-    if (formElement) formElement.scrollIntoView({ behavior: 'smooth' });
+  const open = (client?: Client) => {
+    setEditing(client || null);
+    setName(client?.name || "");
+    setColor(client?.color || "#62835c");
+    setContactName(client?.contactName || "");
+    setContactEmail(client?.contactEmail || "");
+    setServices(client?.services || "");
+    setIsInternal(client?.isInternal || false);
+    setFormOpen(true);
   };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    resetForm();
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    const values = {
+      name: name.trim(),
+      color,
+      contactName,
+      contactEmail,
+      services,
+      isInternal,
+    };
+    if (editing) onUpdateClient({ ...editing, ...values });
+    else onAddClient(values);
+    setFormOpen(false);
   };
-
-  const resetForm = () => {
-    setName('');
-    setColor('#6366f1');
-    setIsInternal(false);
-    setContactName('');
-    setContactEmail('');
-    setServices('');
-    setEditingId(null);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name) return;
-
-    if (editingId) {
-        onUpdateClient({
-            id: editingId,
-            name,
-            color,
-            isInternal,
-            contactName,
-            contactEmail,
-            services
-        });
-    } else {
-        onAddClient({
-            name,
-            color,
-            isInternal,
-            contactName,
-            contactEmail,
-            services
-        });
-    }
-    resetForm();
-  };
-
-  const toggleExpand = (id: string) => {
-    setExpandedClientId(expandedClientId === id ? null : id);
-  };
-
+  const filtered = [...clients]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter((c) =>
+      `${c.name} ${c.contactName || ""} ${c.services || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+    );
   return (
-    <div id="client-manager" className="space-y-8 p-6 pb-20">
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-2">Client Management</h2>
-        <p className="text-slate-400 text-sm">Organize your portfolio and client details.</p>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Form */}
-        <div id="client-form" className={`bg-slate-800 rounded-xl border ${editingId ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-700'} p-6 h-fit transition-all duration-300`}>
-          <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                {editingId ? <Edit2 size={20} className="text-indigo-400" /> : <Plus size={20} className="text-indigo-400" />}
-                {editingId ? 'Edit Client' : 'Add New Client'}
-              </h3>
-              {editingId && (
-                  <button 
-                    onClick={handleCancelEdit}
-                    className="text-slate-400 hover:text-white flex items-center gap-1 text-sm bg-slate-700 px-2 py-1 rounded"
-                  >
-                      <X size={14} /> Cancel
-                  </button>
-              )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Client Name *</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                placeholder="e.g. Acme Corp"
-                required
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Tag Color</label>
-                  <input
-                    type="color"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                    className="h-10 w-full bg-slate-900 border border-slate-700 rounded-lg cursor-pointer"
-                  />
-               </div>
-               <div className="flex items-end">
-                   <label className="flex items-center gap-2 cursor-pointer bg-slate-900 border border-slate-700 rounded-lg px-4 h-10 w-full hover:bg-slate-800 transition-colors">
-                       <input 
-                         type="checkbox" 
-                         checked={isInternal} 
-                         onChange={(e) => setIsInternal(e.target.checked)}
-                         className="w-4 h-4 rounded border-slate-500 text-indigo-600 focus:ring-indigo-500 bg-slate-700"
-                       />
-                       <span className="text-sm text-slate-300 select-none">Internal Work</span>
-                   </label>
-               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Contact Name</label>
-                    <input
-                        type="text"
-                        value={contactName}
-                        onChange={(e) => setContactName(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
-                        placeholder="Optional"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Contact Email</label>
-                    <input
-                        type="email"
-                        value={contactEmail}
-                        onChange={(e) => setContactEmail(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
-                        placeholder="Optional"
-                    />
-                </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Services Covered</label>
-              <textarea
-                value={services}
-                onChange={(e) => setServices(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm h-20 resize-none"
-                placeholder="e.g. Server Maintenance, M365 Support..."
-              />
-            </div>
-
-            <button
-              type="submit"
-              className={`w-full font-medium py-2 rounded-lg transition-colors mt-2 flex items-center justify-center gap-2 ${
-                  editingId 
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
-                  : 'bg-slate-700 hover:bg-indigo-600 text-white'
-              }`}
-            >
-              {editingId ? <Save size={18} /> : <Plus size={18} />}
-              {editingId ? 'Update Client' : 'Create Client'}
-            </button>
-          </form>
+    <div id="client-manager" className="workspace-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">THE PEOPLE BEHIND THE WORK</p>
+          <h1>Great work. Good relationships.</h1>
+          <p>Keep the right people and the details that matter close by.</p>
         </div>
-
-        {/* List */}
-        <div className="space-y-4">
-          {sortedClients.map(client => {
-            const isExpanded = expandedClientId === client.id;
-            const isEditing = editingId === client.id;
-            
-            return (
-              <div 
-                key={client.id} 
-                className={`bg-slate-800/50 rounded-xl border overflow-hidden group transition-all duration-300 ${
-                    isEditing ? 'border-indigo-500 shadow-lg shadow-indigo-900/20 opacity-60 pointer-events-none' : 'border-slate-700 hover:border-indigo-500/50'
-                }`}
+        <button className="button primary" onClick={() => open()}>
+          <Plus size={17} /> New client
+        </button>
+      </div>
+      <div className="client-toolbar">
+        <label className="search-field">
+          <Search size={17} />
+          <input
+            aria-label="Search clients"
+            placeholder="Find a client, contact or service…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <span className="client-summary">
+          {clients.filter((c) => !c.isInternal).length} clients ·{" "}
+          {clients.filter((c) => c.isInternal).length} internal
+        </span>
+      </div>
+      <div className="client-grid">
+        {filtered.map((client) => (
+          <article className="client-card" key={client.id}>
+            <div className="client-card-heading">
+              <span
+                className="client-monogram"
+                style={{ borderColor: client.color }}
               >
-                <div 
-                  className="p-4 flex items-center justify-between cursor-pointer"
-                  onClick={() => !isEditing && toggleExpand(client.id)}
-                >
-                  <div className="flex items-center gap-4">
-                    <div 
-                      className="w-12 h-12 rounded-lg flex items-center justify-center text-slate-900 font-bold text-xl shrink-0"
-                      style={{ backgroundColor: client.color }}
-                    >
-                      {client.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-white font-semibold">{client.name}</h4>
-                        {client.isInternal && (
-                            <span className="text-[10px] font-bold bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600 flex items-center gap-1">
-                                <ShieldCheck size={10} /> INTERNAL
-                            </span>
-                        )}
-                      </div>
-                      <p className="text-slate-500 text-xs mt-1 flex items-center gap-2">
-                        <span>ID: {client.id.substring(0,6)}</span>
-                        {(client.contactName || client.services) && (
-                            <span className="text-indigo-400 flex items-center gap-0.5">
-                               {isExpanded ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
-                               {isExpanded ? 'Hide Details' : 'View Details'}
-                            </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleEditClick(client); }}
-                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                        title="Edit Client"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); onDeleteClient(client.id); }}
-                        className="p-2 text-slate-600 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors"
-                        title="Delete Client"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                  </div>
-                </div>
-
-                {isExpanded && (client.contactName || client.contactEmail || client.services) && (
-                  <div className="px-4 pb-4 pt-0 border-t border-slate-700/50 bg-slate-900/30 animate-in slide-in-from-top-2">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                        {(client.contactName || client.contactEmail) && (
-                            <div className="space-y-2">
-                                <h5 className="text-xs font-medium text-slate-500 uppercase tracking-wider">Contact</h5>
-                                {client.contactName && (
-                                    <div className="flex items-center gap-2 text-sm text-slate-300">
-                                        <User size={14} className="text-indigo-400" />
-                                        {client.contactName}
-                                    </div>
-                                )}
-                                {client.contactEmail && (
-                                    <div className="flex items-center gap-2 text-sm text-slate-300">
-                                        <Mail size={14} className="text-indigo-400" />
-                                        {client.contactEmail}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        {client.services && (
-                            <div className="space-y-2">
-                                <h5 className="text-xs font-medium text-slate-500 uppercase tracking-wider">Services</h5>
-                                <div className="flex items-start gap-2 text-sm text-slate-300">
-                                    <FileText size={14} className="text-emerald-400 mt-0.5 shrink-0" />
-                                    <p className="whitespace-pre-wrap">{client.services}</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {clients.length === 0 && (
-            <div className="text-center text-slate-500 py-10 border-2 border-dashed border-slate-800 rounded-xl">
-              <Briefcase size={40} className="mx-auto mb-2 opacity-20" />
-              <p>No clients yet.</p>
+                {client.name.slice(0, 2).toUpperCase()}
+              </span>
+              <button
+                className="icon-button subtle"
+                aria-label={`Edit ${client.name}`}
+                onClick={() => open(client)}
+              >
+                <Pencil size={16} />
+              </button>
             </div>
+            <h2>{client.name}</h2>
+            <span className="status-pill">
+              {client.isInternal ? "Internal team" : "Client workspace"}
+            </span>
+            <p className="client-contact">
+              <UserRound size={14} />
+              {client.contactName || "No contact added yet"}
+            </p>
+            {client.contactEmail && (
+              <a
+                className="client-contact"
+                href={`mailto:${client.contactEmail}`}
+              >
+                <Mail size={14} />
+                {client.contactEmail}
+              </a>
+            )}
+            <p className="client-services">
+              {client.services ||
+                "Add services or agreement details to keep them handy."}
+            </p>
+            <div className="client-actions">
+              <button className="text-button" onClick={() => open(client)}>
+                Manage details
+              </button>
+              <button
+                className="icon-button subtle"
+                aria-label={`Delete ${client.name}`}
+                onClick={() => setDeleting(client)}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {!filtered.length && (
+        <div className="empty-state">
+          <Users size={30} />
+          <h3>
+            {query ? "No clients found." : "It starts with a connection."}
+          </h3>
+          <p>
+            {query
+              ? "Try a different name or service."
+              : "Add a client or your internal team to organise your work."}
+          </p>
+          {!query && (
+            <button className="button primary" onClick={() => open()}>
+              Add your first client
+            </button>
           )}
         </div>
-      </div>
+      )}
+      {formOpen && (
+        <Dialog
+          title={
+            editing ? "Keep the details current." : "Who are we working with?"
+          }
+          onClose={() => setFormOpen(false)}
+        >
+          <p className="dialog-description">
+            Start with a name. Contacts and services can come later.
+          </p>
+          <form className="workspace-form" onSubmit={submit}>
+            <div className="form-columns">
+              <label>
+                Client name
+                <input
+                  autoFocus
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Northside Studio"
+                />
+              </label>
+              <label>
+                Client colour
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  style={{ height: 40, padding: 4 }}
+                />
+              </label>
+            </div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={isInternal}
+                onChange={(e) => setIsInternal(e.target.checked)}
+              />{" "}
+              This is an internal team
+            </label>
+            <div className="form-columns">
+              <label>
+                Contact name
+                <input
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  placeholder="Optional"
+                />
+              </label>
+              <label>
+                Contact email
+                <input
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  placeholder="Optional"
+                />
+              </label>
+            </div>
+            <label>
+              Services & agreement notes
+              <textarea
+                rows={4}
+                value={services}
+                onChange={(e) => setServices(e.target.value)}
+                placeholder="Managed services, contact preferences, useful context…"
+              />
+            </label>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setFormOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="button primary"
+                disabled={!name.trim()}
+              >
+                {editing ? "Save details" : "Add client"}
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {deleting && (
+        <Dialog title="Remove this client?" onClose={() => setDeleting(null)}>
+          <p className="dialog-description">
+            “{deleting.name}” will be removed from your portfolio. Tasks and
+            time entries will remain, but will no longer show this client’s
+            details.
+          </p>
+          <div className="dialog-actions">
+            <button
+              className="button secondary"
+              onClick={() => setDeleting(null)}
+            >
+              Keep client
+            </button>
+            <button
+              className="button destructive"
+              onClick={() => {
+                onDeleteClient(deleting.id);
+                setDeleting(null);
+              }}
+            >
+              Remove client
+            </button>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
-};
-
-export default ClientManager;
+}

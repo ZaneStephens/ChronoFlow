@@ -1,765 +1,549 @@
-import React, { useState, useMemo } from 'react';
-import { Task, Subtask, Client, ActiveTimer } from '../types';
-import { Play, Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, Trash2, Wand2, Clock, Hash, CheckSquare, EyeOff, Eye, Pencil, Save, X, Briefcase, Link as LinkIcon } from 'lucide-react';
-import { generateSubtasks } from '../services/geminiService';
+import React, { useState } from "react";
+import { Task, Subtask, Client, ActiveTimer } from "../types";
+import {
+  Play,
+  Square,
+  Plus,
+  Search,
+  LayoutGrid,
+  List,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Trash2,
+  Wand2,
+  Clock3,
+  Pencil,
+  X,
+  ArrowUpRight,
+} from "lucide-react";
+import { generateSubtasks } from "../services/geminiService";
+import { durationLabel } from "../services/workspaceMetrics";
+import Dialog from "./ui/Dialog";
 
 interface TaskBoardProps {
   tasks: Task[];
   subtasks: Subtask[];
   clients: Client[];
   activeTimer: ActiveTimer | null;
-  onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'totalTime' | 'status'>) => void;
+  onAddTask: (
+    task: Omit<Task, "id" | "createdAt" | "totalTime" | "status">,
+  ) => void;
   onUpdateTask: (task: Task) => void;
-  onUpdateSubtask: (subtaskId: string, title: string) => void;
-  onAddSubtasks: (taskId: string, subtasks: { title: string; link?: string }[]) => void;
-  onDeleteTask: (taskId: string) => void;
-  onDeleteSubtask: (subtaskId: string) => void;
-  onToggleSubtask: (subtaskId: string) => void;
+  onUpdateSubtask: (id: string, title: string) => void;
+  onAddSubtasks: (
+    taskId: string,
+    subtasks: { title: string; link?: string }[],
+  ) => void;
+  onDeleteTask: (id: string) => void;
+  onDeleteSubtask: (id: string) => void;
+  onToggleSubtask: (id: string) => void;
   onStartTimer: (taskId: string, subtaskId?: string) => void;
   onStopTimer: () => void;
   onPreviewTask?: (task: Task) => void;
 }
-
-const TaskBoard: React.FC<TaskBoardProps> = ({
-  tasks,
-  subtasks,
-  clients,
-  activeTimer,
-  onAddTask,
-  onUpdateTask,
-  onUpdateSubtask,
-  onAddSubtasks,
-  onDeleteTask,
-  onDeleteSubtask,
-  onToggleSubtask,
-  onStartTimer,
-  onStopTimer,
-  onPreviewTask,
-}) => {
-  const [selectedClientId, setSelectedClientId] = useState<string>('all');
-  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
-  const [isAiLoading, setIsAiLoading] = useState<string | null>(null); // taskId being processed
-  const [manualSubtaskInputs, setManualSubtaskInputs] = useState<{[key: string]: string}>({});
-  const [manualSubtaskLinks, setManualSubtaskLinks] = useState<{[key: string]: string}>({});
-  const [showSubtaskLinkInput, setShowSubtaskLinkInput] = useState<{[key: string]: boolean}>({});
-  const [showCompleted, setShowCompleted] = useState(false);
-  
-  // New Task Form State
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDesc, setNewTaskDesc] = useState('');
-  const [newTaskClient, setNewTaskClient] = useState('');
-  const [newTaskTicket, setNewTaskTicket] = useState('');
-  const [newTaskLink, setNewTaskLink] = useState('');
-
-  // Editing Task State
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editTaskData, setEditTaskData] = useState<{title: string, description: string, clientId: string, ticketNumber: string, link: string}>({
-      title: '', description: '', clientId: '', ticketNumber: '', link: ''
-  });
-
-  // Editing Subtask State
-  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
-  const [editSubtaskTitle, setEditSubtaskTitle] = useState('');
-
-  // --- Logic for Sorting and Top Clients ---
-  const sortedClients = useMemo(() => 
-    [...clients].sort((a, b) => a.name.localeCompare(b.name)), 
-  [clients]);
-
-  const { topClients, otherClients } = useMemo(() => {
-     const counts: Record<string, number> = {};
-     tasks.forEach(t => counts[t.clientId] = (counts[t.clientId] || 0) + 1);
-     
-     // Get Top 3 based on task count
-     const topIds = Object.keys(counts)
-        .filter(id => counts[id] > 0)
-        .sort((a, b) => counts[b] - counts[a])
-        .slice(0, 3);
-        
-     const top = topIds.map(id => clients.find(c => c.id === id)).filter((c): c is Client => !!c);
-     const other = sortedClients.filter(c => !topIds.includes(c.id));
-     
-     return { topClients: top, otherClients: other };
-  }, [tasks, clients, sortedClients]);
-
-  // ---
-
-  const filteredTasks = tasks.filter(t => {
-      // 1. Client Filter
-      if (selectedClientId !== 'all' && t.clientId !== selectedClientId) return false;
-      
-      // 2. Completion Status Filter
-      if (!showCompleted && t.status === 'done') return false;
-
-      return true;
-  });
-
-  const toggleTaskExpand = (taskId: string) => {
-    const newSet = new Set(expandedTasks);
-    if (newSet.has(taskId)) newSet.delete(taskId);
-    else newSet.add(taskId);
-    setExpandedTasks(newSet);
+const TaskBoard: React.FC<TaskBoardProps> = (props) => {
+  const {
+    tasks,
+    subtasks,
+    clients,
+    activeTimer,
+    onAddTask,
+    onUpdateTask,
+    onAddSubtasks,
+    onDeleteTask,
+    onDeleteSubtask,
+    onToggleSubtask,
+    onStartTimer,
+    onStopTimer,
+  } = props;
+  const [query, setQuery] = useState("");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [layout, setLayout] = useState<"board" | "list">("board");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [ticketNumber, setTicketNumber] = useState("");
+  const [link, setLink] = useState("");
+  const statuses: Task["status"][] = ["todo", "in-progress", "done"];
+  const labels = { todo: "To do", "in-progress": "In progress", done: "Done" };
+  const filtered = tasks
+    .filter(
+      (t) =>
+        (clientFilter === "all" || t.clientId === clientFilter) &&
+        `${t.title} ${t.description} ${t.ticketNumber || ""} ${clients.find((c) => c.id === t.clientId)?.name || ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    )
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const openForm = (task?: Task) => {
+    setEditing(task || null);
+    setTitle(task?.title || "");
+    setDescription(task?.description || "");
+    setClientId(
+      task?.clientId ||
+        (clientFilter !== "all" ? clientFilter : clients[0]?.id || ""),
+    );
+    setTicketNumber(task?.ticketNumber || "");
+    setLink(task?.link || "");
+    setFormOpen(true);
   };
-
-  const handleManualSubtaskChange = (taskId: string, value: string) => {
-    setManualSubtaskInputs(prev => ({...prev, [taskId]: value}));
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !clientId) return;
+    const values = {
+      title: title.trim(),
+      description,
+      clientId,
+      ticketNumber,
+      link,
+    };
+    if (editing) onUpdateTask({ ...editing, ...values });
+    else onAddTask(values);
+    setFormOpen(false);
   };
-
-  const handleManualSubtaskLinkChange = (taskId: string, value: string) => {
-    setManualSubtaskLinks(prev => ({...prev, [taskId]: value}));
-  };
-
-  const toggleSubtaskLinkInput = (taskId: string) => {
-    setShowSubtaskLinkInput(prev => ({...prev, [taskId]: !prev[taskId]}));
-  };
-
-  const handleAddManualSubtask = (taskId: string) => {
-    const title = manualSubtaskInputs[taskId];
-    if (!title?.trim()) return;
-    
-    const link = manualSubtaskLinks[taskId];
-
-    onAddSubtasks(taskId, [{ title, link }]);
-    setManualSubtaskInputs(prev => ({...prev, [taskId]: ''}));
-    setManualSubtaskLinks(prev => ({...prev, [taskId]: ''}));
-    setShowSubtaskLinkInput(prev => ({...prev, [taskId]: false}));
-  };
-
-  const handleGenerateSubtasks = async (task: Task, mode: 'technical' | 'csm') => {
-    setIsAiLoading(task.id);
+  const generate = async (task: Task) => {
+    setBusy(task.id);
+    setError("");
     try {
-      const client = clients.find(c => c.id === task.clientId);
-      const generated = await generateSubtasks(task.title, task.description, mode, client?.isInternal || false);
-      if (generated.length > 0) {
-        onAddSubtasks(task.id, generated);
-        // Auto expand
-        const newSet = new Set(expandedTasks);
-        newSet.add(task.id);
-        setExpandedTasks(newSet);
-      }
-    } catch (e) {
-      console.error(e);
+      const results = await generateSubtasks(
+        task.title,
+        task.description,
+        "technical",
+        clients.find((c) => c.id === task.clientId)?.isInternal || false,
+      );
+      if (!results.length) throw new Error("No suggestions returned");
+      onAddSubtasks(task.id, results);
+      setExpanded(task.id);
+    } catch {
+      setError(
+        "Suggestions are unavailable right now. You can still add steps manually.",
+      );
     } finally {
-      setIsAiLoading(null);
+      setBusy(null);
     }
   };
-
-  const handleCreateTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim() || !newTaskClient) return;
-    onAddTask({
-      title: newTaskTitle,
-      description: newTaskDesc,
-      clientId: newTaskClient,
-      ticketNumber: newTaskTicket,
-      link: newTaskLink
-    });
-    setNewTaskTitle('');
-    setNewTaskDesc('');
-    setNewTaskTicket('');
-    setNewTaskLink('');
-  };
-
-  // --- Edit Task Logic ---
-  const startEditTask = (task: Task) => {
-      setEditingTaskId(task.id);
-      setEditTaskData({
-          title: task.title,
-          description: task.description || '',
-          clientId: task.clientId,
-          ticketNumber: task.ticketNumber || '',
-          link: task.link || ''
-      });
-  };
-
-  const cancelEditTask = () => {
-      setEditingTaskId(null);
-  };
-
-  const saveEditTask = (taskId: string) => {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
-      onUpdateTask({
-          ...task,
-          title: editTaskData.title,
-          description: editTaskData.description,
-          clientId: editTaskData.clientId,
-          ticketNumber: editTaskData.ticketNumber,
-          link: editTaskData.link
-      });
-      setEditingTaskId(null);
-  };
-
-  // --- Edit Subtask Logic ---
-  const startEditSubtask = (subtask: Subtask) => {
-      setEditingSubtaskId(subtask.id);
-      setEditSubtaskTitle(subtask.title);
-  };
-
-  const saveEditSubtask = (subtaskId: string) => {
-      if (editSubtaskTitle.trim()) {
-          onUpdateSubtask(subtaskId, editSubtaskTitle);
-      }
-      setEditingSubtaskId(null);
-  };
-
-  const formatDuration = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
-  };
-
-  return (
-    <div id="task-board" className="space-y-6 p-6 pb-24">
-      {/* Header & Filters */}
-      <div className="flex flex-col gap-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-3xl font-bold text-white tracking-tight">Tasks and Tickets</h2>
-            <p className="text-slate-400 text-sm mt-1">Manage your workload and track time precisely.</p>
-          </div>
-          
+  const taskCard = (task: Task) => {
+    const client = clients.find((c) => c.id === task.clientId);
+    const steps = subtasks.filter((s) => s.taskId === task.id);
+    const running = activeTimer?.taskId === task.id;
+    return (
+      <article
+        className={`work-card ${running ? "tracked" : ""}`}
+        key={task.id}
+      >
+        <div className="work-card-top">
+          <span className="client-label">
+            <i
+              className="client-dot"
+              style={{ background: client?.color || "#849589" }}
+            />
+            {client?.name || "Unassigned"}
+          </span>
           <button
-            onClick={() => setShowCompleted(!showCompleted)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
-              showCompleted 
-                ? 'bg-slate-700 text-white border-slate-600' 
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
-            }`}
-            title={showCompleted ? "Hide Completed Tasks" : "Show Completed Tasks"}
+            className="icon-button subtle"
+            aria-label={`Edit ${task.title}`}
+            onClick={() => openForm(task)}
           >
-            {showCompleted ? <Eye size={16} /> : <EyeOff size={16} />}
-            <span className="hidden md:inline">{showCompleted ? "Hide Completed" : "Show Completed"}</span>
+            <Pencil size={15} />
           </button>
         </div>
-        
-        {/* Client Filters Row - Full Width Scrollable */}
-        <div className="w-full">
-           <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800/50">
+        <button
+          className="work-card-title"
+          onClick={() => {
+            setExpanded(expanded === task.id ? null : task.id);
+            setSubtaskTitle("");
+          }}
+        >
+          {task.title}
+        </button>
+        {task.description && (
+          <p className="work-description">{task.description}</p>
+        )}
+        {task.ticketNumber && (
+          <span className="ticket-label">#{task.ticketNumber}</span>
+        )}
+        <div className="work-card-bottom">
+          <button
+            className="steps-toggle"
+            aria-expanded={expanded === task.id}
+            onClick={() => {
+              setExpanded(expanded === task.id ? null : task.id);
+              setSubtaskTitle("");
+            }}
+          >
+            {expanded === task.id ? (
+              <ChevronDown size={15} />
+            ) : (
+              <ChevronRight size={15} />
+            )}
+            {steps.filter((s) => s.isCompleted).length}/{steps.length} steps
+          </button>
+          <span className="task-duration">
+            <Clock3 size={13} />
+            {durationLabel(
+              task.totalTime + steps.reduce((sum, s) => sum + s.totalTime, 0),
+            )}
+          </span>
+          <button
+            className={`icon-button ${running ? "running" : ""}`}
+            aria-label={`${running ? "Stop" : "Start"} ${task.title}`}
+            onClick={() => (running ? onStopTimer() : onStartTimer(task.id))}
+          >
+            {running ? <Square size={15} /> : <Play size={15} />}
+          </button>
+        </div>
+        <div className="work-status">
+          <label className="sr-only" htmlFor={`status-${task.id}`}>
+            Status of {task.title}
+          </label>
+          <select
+            id={`status-${task.id}`}
+            value={task.status}
+            onChange={(e) =>
+              onUpdateTask({
+                ...task,
+                status: e.target.value as Task["status"],
+              })
+            }
+          >
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {labels[status]}
+              </option>
+            ))}
+          </select>
+          {running && (
+            <span className="tracking-label">
+              <i />
+              Tracking
+            </span>
+          )}
+        </div>
+        {expanded === task.id && (
+          <div className="task-details">
+            {steps.map((step) => (
+              <div className="subtask-row" key={step.id}>
+                <button
+                  className={`complete-control ${step.isCompleted ? "checked" : ""}`}
+                  aria-label={`${step.isCompleted ? "Reopen" : "Complete"} ${step.title}`}
+                  onClick={() => onToggleSubtask(step.id)}
+                >
+                  <Check size={14} />
+                </button>
+                <span className={step.isCompleted ? "completed-text" : ""}>
+                  {step.title}
+                </span>
+                <button
+                  className="icon-button subtle"
+                  aria-label={`Start ${step.title}`}
+                  onClick={() => onStartTimer(task.id, step.id)}
+                >
+                  <Play size={13} />
+                </button>
+                <button
+                  className="icon-button subtle"
+                  aria-label={`Remove ${step.title}`}
+                  onClick={() => onDeleteSubtask(step.id)}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+            <form
+              className="add-step"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (subtaskTitle.trim()) {
+                  onAddSubtasks(task.id, [{ title: subtaskTitle.trim() }]);
+                  setSubtaskTitle("");
+                }
+              }}
+            >
+              <input
+                aria-label={`Add a step to ${task.title}`}
+                placeholder="Add a small next step…"
+                value={subtaskTitle}
+                onChange={(e) => setSubtaskTitle(e.target.value)}
+              />
               <button
-                onClick={() => setSelectedClientId('all')}
-                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border ${
-                  selectedClientId === 'all' 
-                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-900/20' 
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-600'
-                }`}
-              >
-                All Clients
-              </button>
-              
-              {/* Top Clients Section */}
-              {topClients.length > 0 && (
-                <>
-                   <div className="h-6 w-px bg-slate-700/50 mx-1 flex-shrink-0"></div>
-                   {topClients.map(client => (
-                    <button
-                      key={client.id}
-                      onClick={() => setSelectedClientId(client.id)}
-                      className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border flex items-center gap-2 ${
-                        selectedClientId === client.id 
-                          ? 'bg-slate-700 text-white border-indigo-500 ring-1 ring-indigo-500/50 shadow-lg shadow-black/20' 
-                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-600'
-                      }`}
-                    >
-                      <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: client.color, color: client.color }}></span>
-                      {client.name}
-                    </button>
-                  ))}
-                </>
-              )}
-
-              {/* Separator between Top and Other */}
-              {topClients.length > 0 && otherClients.length > 0 && (
-                 <div className="h-6 w-px bg-slate-700/50 mx-1 flex-shrink-0"></div>
-              )}
-
-              {/* Other Clients */}
-              {otherClients.map(client => (
-                <button
-                  key={client.id}
-                  onClick={() => setSelectedClientId(client.id)}
-                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border flex items-center gap-2 ${
-                    selectedClientId === client.id 
-                      ? 'bg-slate-700 text-white border-indigo-500 ring-1 ring-indigo-500/50 shadow-lg shadow-black/20' 
-                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-600'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: client.color }}></span>
-                  {client.name}
-                </button>
-              ))}
-           </div>
-        </div>
-      </div>
-
-      {/* New Task Input */}
-      <form onSubmit={handleCreateTask} className="bg-slate-800/40 border border-slate-700 rounded-xl p-4 flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row gap-2">
-            <input
-              type="text"
-              placeholder="What needs to be done?"
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              className="flex-[2] bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <input
-              type="text"
-              placeholder="Ticket # (Optional)"
-              value={newTaskTicket}
-              onChange={(e) => setNewTaskTicket(e.target.value)}
-              className="md:w-32 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-        </div>
-        
-        <div className="flex flex-col md:flex-row gap-2 items-end">
-            <div className="flex-1 w-full flex flex-col gap-2">
-                <input
-                    type="text"
-                    placeholder="Description (optional)"
-                    value={newTaskDesc}
-                    onChange={(e) => setNewTaskDesc(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                 <input
-                    type="text"
-                    placeholder="Link URL (Optional)"
-                    value={newTaskLink}
-                    onChange={(e) => setNewTaskLink(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-            </div>
-            
-            <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
-                <select
-                value={newTaskClient}
-                onChange={(e) => setNewTaskClient(e.target.value)}
-                className="flex-1 md:w-48 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 h-[42px]"
-                >
-                <option value="">Select Client...</option>
-                {topClients.length > 0 && (
-                    <optgroup label="Frequently Used">
-                    {topClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </optgroup>
-                )}
-                <optgroup label="All Clients">
-                    {otherClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </optgroup>
-                </select>
-                <button
-                disabled={!newTaskTitle || !newTaskClient}
                 type="submit"
-                className="h-[42px] px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center space-x-2 whitespace-nowrap"
+                className="icon-button"
+                aria-label="Add step"
+                disabled={!subtaskTitle.trim()}
+              >
+                <Plus size={16} />
+              </button>
+            </form>
+            <div className="detail-actions">
+              <button
+                className="text-button"
+                onClick={() => generate(task)}
+                disabled={busy !== null}
+              >
+                <Wand2 size={14} />
+                {busy === task.id ? "Thinking…" : "Suggest steps"}
+              </button>
+              {task.link && /^https?:\/\//i.test(task.link) && (
+                <a
+                  className="text-button"
+                  href={task.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
-                <Plus size={18} />
-                <span>Add Task</span>
-                </button>
+                  Ticket <ArrowUpRight size={14} />
+                </a>
+              )}
+              <button
+                className="icon-button danger"
+                aria-label={`Delete ${task.title}`}
+                onClick={() => setPendingDelete(task)}
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
-        </div>
-      </form>
-
-      {/* Task List */}
-      <div className="space-y-4">
-        {filteredTasks.length === 0 && (
-          <div className="text-center py-12 text-slate-500">
-            {selectedClientId === 'all' && !showCompleted ? 'No active tasks found. Add a task or check completed items.' : 'No tasks match your filters.'}
           </div>
         )}
-        
-        {filteredTasks.map(task => {
-          const client = clients.find(c => c.id === task.clientId);
-          const taskSubtasks = subtasks.filter(s => s.taskId === task.id);
-          const isExpanded = expandedTasks.has(task.id);
-          const isActive = activeTimer?.taskId === task.id && !activeTimer?.subtaskId;
-          const isDone = task.status === 'done';
-          const isEditing = editingTaskId === task.id;
-          
-          // Calculate total time including subtasks
-          const aggregatedSubtaskTime = taskSubtasks.reduce((acc, curr) => acc + curr.totalTime, 0);
-          const displayTotalTime = task.totalTime + aggregatedSubtaskTime;
-
-          return (
-            <div 
-              key={task.id} 
-              className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${
-                 isDone 
-                   ? 'border-emerald-500/30 opacity-75' 
-                   : 'border-slate-700 hover:border-slate-600'
-              }`}
-            >
-              <div className="p-4 flex items-center gap-4">
-                <button 
-                  onClick={() => toggleTaskExpand(task.id)}
-                  className="text-slate-400 hover:text-white transition-colors self-start mt-1"
+      </article>
+    );
+  };
+  return (
+    <div id="task-board" className="workspace-page tasks-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">FROM TO-DO TO DONE</p>
+          <h1>Good work starts here.</h1>
+          <p>A home for the tickets, tasks and little next steps.</p>
+        </div>
+        <button className="button primary" onClick={() => openForm()}>
+          <Plus size={17} /> New task
+        </button>
+      </div>
+      <div className="task-toolbar">
+        <label className="search-field">
+          <Search size={17} />
+          <input
+            aria-label="Search tasks"
+            placeholder="Search tasks, clients or ticket numbers…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
+            <button aria-label="Clear task search" onClick={() => setQuery("")}>
+              <X size={15} />
+            </button>
+          )}
+        </label>
+        <select
+          aria-label="Filter tasks by client"
+          value={clientFilter}
+          onChange={(e) => setClientFilter(e.target.value)}
+        >
+          <option value="all">All clients</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <div className="segmented-control" aria-label="Task layout">
+          <button
+            aria-label="Board view"
+            aria-pressed={layout === "board"}
+            className={layout === "board" ? "selected" : ""}
+            onClick={() => setLayout("board")}
+          >
+            <LayoutGrid size={17} />
+          </button>
+          <button
+            aria-label="List view"
+            aria-pressed={layout === "list"}
+            className={layout === "list" ? "selected" : ""}
+            onClick={() => setLayout("list")}
+          >
+            <List size={17} />
+          </button>
+        </div>
+      </div>
+      {error && (
+        <div className="inline-notice" role="alert">
+          {error}
+          <button aria-label="Dismiss message" onClick={() => setError("")}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      <div
+        className={`task-board-grid ${layout === "list" ? "list-layout" : ""}`}
+      >
+        {statuses.map((status) => (
+          <section className={`board-column ${status}`} key={status}>
+            <div className="column-heading">
+              <h2>
+                <i />
+                {labels[status]}
+                <span>
+                  {filtered.filter((t) => t.status === status).length}
+                </span>
+              </h2>
+              {status === "todo" && (
+                <button
+                  className="icon-button subtle"
+                  aria-label="Add task"
+                  onClick={() => openForm()}
                 >
-                  {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                  <Plus size={17} />
                 </button>
-                
-                <div className="flex-1 min-w-0">
-                  {isEditing ? (
-                      <div className="space-y-3 mb-2 animate-in fade-in duration-200">
-                           <div className="flex flex-col md:flex-row gap-2">
-                               <input 
-                                 type="text" 
-                                 value={editTaskData.title}
-                                 onChange={(e) => setEditTaskData({...editTaskData, title: e.target.value})}
-                                 className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                 placeholder="Task Title"
-                               />
-                               <input 
-                                 type="text" 
-                                 value={editTaskData.ticketNumber}
-                                 onChange={(e) => setEditTaskData({...editTaskData, ticketNumber: e.target.value})}
-                                 className="md:w-32 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                 placeholder="Ticket #"
-                               />
-                           </div>
-                           <div className="flex gap-2">
-                               <select
-                                 value={editTaskData.clientId}
-                                 onChange={(e) => setEditTaskData({...editTaskData, clientId: e.target.value})}
-                                 className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                               >
-                                    {topClients.length > 0 && (
-                                        <optgroup label="Frequently Used">
-                                        {topClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </optgroup>
-                                    )}
-                                    <optgroup label="All Clients">
-                                        {otherClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </optgroup>
-                               </select>
-                           </div>
-                           <textarea 
-                             value={editTaskData.description}
-                             onChange={(e) => setEditTaskData({...editTaskData, description: e.target.value})}
-                             className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 h-20"
-                             placeholder="Description"
-                           />
-                           <input 
-                             type="text" 
-                             value={editTaskData.link}
-                             onChange={(e) => setEditTaskData({...editTaskData, link: e.target.value})}
-                             className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                             placeholder="Link URL"
-                           />
-                           <div className="flex gap-2 justify-end">
-                                <button onClick={() => saveEditTask(task.id)} className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm transition-colors">
-                                    <Save size={14} /> Save
-                                </button>
-                                <button onClick={cancelEditTask} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors">
-                                    <X size={14} /> Cancel
-                                </button>
-                           </div>
-                      </div>
-                  ) : (
-                      <>
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span 
-                            className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-900 shrink-0"
-                            style={{ backgroundColor: client?.color || '#cbd5e1' }}
-                            >
-                            {client?.name}
-                            </span>
-                            {task.ticketNumber && (
-                            <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded shrink-0">
-                                <Hash size={10} /> {task.ticketNumber}
-                            </span>
-                            )}
-                            <h3 className={`text-lg font-semibold ml-1 truncate ${isDone ? 'text-slate-400 line-through' : 'text-white'}`}>
-                            {task.title}
-                            </h3>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-slate-400">
-                            <span className="flex items-center gap-1 shrink-0">
-                            <Clock size={14} /> {formatDuration(displayTotalTime)}
-                            </span>
-                            {task.description && <span className="truncate max-w-xs hidden sm:block">{task.description}</span>}
-                            {/* Render Documentation Link from first subtask if available */}
-                            {taskSubtasks.length > 0 && (() => {
-                            const firstSub = taskSubtasks[0];
-                            const linkMatch = firstSub.title.match(/(https?:\/\/[^\s]+)/);
-                            if (linkMatch) {
-                                return (
-                                    <a href={linkMatch[0]} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs shrink-0">
-                                        Documentation Link
-                                    </a>
-                                );
-                            }
-                            return null;
-                            })()}
-                        </div>
-                      </>
-                  )}
-                </div>
-
-                {!isEditing && (
-                    <div className="flex items-center gap-2 shrink-0 self-start mt-1">
-                    {task.link && (
-                        <a 
-                            href={task.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 rounded-full bg-slate-700 text-slate-300 hover:bg-indigo-600 hover:text-white transition-colors"
-                            title="Open Link"
-                        >
-                            <LinkIcon size={18} />
-                        </a>
-                    )}
-
-                    <button
-                        onClick={() => isActive ? onStopTimer() : onStartTimer(task.id)}
-                        className={`p-2 rounded-full transition-all ${
-                        isActive 
-                            ? 'bg-indigo-500/20 text-indigo-400 animate-pulse ring-1 ring-indigo-500' 
-                            : 'bg-slate-700 text-slate-300 hover:bg-indigo-600 hover:text-white'
-                        }`}
-                        title={isActive ? "Stop Timer" : "Start Timer"}
-                        disabled={isDone}
-                    >
-                        {isActive ? <PauseIcon /> : <Play size={18} fill="currentColor" />}
-                    </button>
-
-                    <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
-
-                    <button
-                        onClick={() => onUpdateTask({...task, status: isDone ? 'todo' : 'done'})}
-                        className={`p-2 rounded-full transition-colors ${
-                            isDone 
-                            ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' 
-                            : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-700'
-                        }`}
-                        title={isDone ? "Mark as Active" : "Mark as Completed"}
-                    >
-                        <CheckCircle2 size={18} />
-                    </button>
-
-                    <button
-                        onClick={() => startEditTask(task)}
-                        className="p-2 rounded-full hover:bg-slate-700 text-slate-500 hover:text-white transition-colors"
-                        title="Edit Task"
-                    >
-                        <Pencil size={18} />
-                    </button>
-                    
-                    <button
-                        onClick={() => onDeleteTask(task.id)}
-                        className="p-2 rounded-full hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
-                        title="Delete Task"
-                    >
-                        <Trash2 size={18} />
-                    </button>
-                    </div>
-                )}
-              </div>
-
-              {/* Expanded Content (Subtasks) */}
-              {isExpanded && (
-                <div className="bg-slate-900/50 border-t border-slate-700/50 p-4 pl-12">
-                  <div className="space-y-2">
-                    {taskSubtasks.map(subtask => {
-                      const isSubActive = activeTimer?.subtaskId === subtask.id;
-                      const isSubEditing = editingSubtaskId === subtask.id;
-                      
-                      // Check for links in subtask titles
-                      const linkMatch = subtask.title.match(/(https?:\/\/[^\s]+)/);
-                      let displayTitle: React.ReactNode = subtask.title;
-                      
-                      if (linkMatch) {
-                          const url = linkMatch[0];
-                          const textBefore = subtask.title.substring(0, linkMatch.index);
-                          displayTitle = (
-                              <span>
-                                  {textBefore} 
-                                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline inline-flex items-center gap-1 ml-1">
-                                      {url.length > 30 ? 'Documentation Link' : url}
-                                  </a>
-                              </span>
-                          );
-                      }
-
-                      return (
-                        <div key={subtask.id} className="flex items-center justify-between group py-2 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/30 px-2 -mx-2 rounded">
-                          <div className="flex items-center gap-3 flex-1">
-                            <button onClick={() => onToggleSubtask(subtask.id)} className="text-slate-500 hover:text-indigo-400">
-                              {subtask.isCompleted ? (
-                                <CheckCircle2 size={18} className="text-emerald-500" />
-                              ) : (
-                                <Circle size={18} />
-                              )}
-                            </button>
-                            
-                            {isSubEditing ? (
-                                <div className="flex-1 flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        value={editSubtaskTitle}
-                                        onChange={(e) => setEditSubtaskTitle(e.target.value)}
-                                        className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                        autoFocus
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') saveEditSubtask(subtask.id);
-                                            if (e.key === 'Escape') setEditingSubtaskId(null);
-                                        }}
-                                    />
-                                    <button onClick={() => saveEditSubtask(subtask.id)} className="text-indigo-400 hover:text-indigo-300"><CheckSquare size={16} /></button>
-                                    <button onClick={() => setEditingSubtaskId(null)} className="text-slate-500 hover:text-red-400"><X size={16} /></button>
-                                </div>
-                            ) : (
-                                <span className={`${subtask.isCompleted ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
-                                    {displayTitle}
-                                </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-slate-500 font-mono">{formatDuration(subtask.totalTime)}</span>
-                            
-                            {!isSubEditing && !isDone && (
-                                <>
-                                  <button 
-                                      onClick={() => startEditSubtask(subtask)}
-                                      className="p-1.5 text-slate-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
-                                      title="Edit Subtask"
-                                  >
-                                      <Pencil size={14} />
-                                  </button>
-                                  <button 
-                                      onClick={() => onDeleteSubtask(subtask.id)}
-                                      className="p-1.5 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                                      title="Delete Subtask"
-                                  >
-                                      <Trash2 size={14} />
-                                  </button>
-                                </>
-                            )}
-                            
-                            {subtask.link && (
-                                <a 
-                                    href={subtask.link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-1.5 rounded-full bg-slate-700/50 text-slate-400 hover:bg-indigo-500 hover:text-white transition-colors flex items-center justify-center"
-                                    title="Open Link"
-                                    style={{ width: 28, height: 28 }}
-                                >
-                                    <LinkIcon size={14} />
-                                </a>
-                            )}
-
-                            <button
-                              onClick={() => isSubActive ? onStopTimer() : onStartTimer(task.id, subtask.id)}
-                              className={`p-1.5 rounded transition-all ${
-                                isSubActive 
-                                  ? 'text-indigo-400 bg-indigo-500/10' 
-                                  : 'text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100'
-                              }`}
-                              style={{ width: 28, height: 28 }}
-                              disabled={isDone || isSubEditing}
-                            >
-                              {isSubActive ? <PauseIcon size={14} /> : <Play size={14} fill="currentColor" />}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Manual Subtask Add */}
-                  {!isDone && (
-                    <div className="mt-4 space-y-2">
-                       <div className="flex gap-2 items-center">
-                           <input 
-                             type="text" 
-                             placeholder="Add subtask manually..."
-                             className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                             value={manualSubtaskInputs[task.id] || ''}
-                             onChange={(e) => handleManualSubtaskChange(task.id, e.target.value)}
-                             onKeyDown={(e) => e.key === 'Enter' && handleAddManualSubtask(task.id)}
-                           />
-                            <button
-                                type="button"
-                                onClick={() => toggleSubtaskLinkInput(task.id)}
-                                className={`p-1.5 rounded transition-colors ${showSubtaskLinkInput[task.id] ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-white'}`}
-                                title="Add Link"
-                            >
-                                <LinkIcon size={16} />
-                            </button>
-                           <button 
-                             onClick={() => handleAddManualSubtask(task.id)}
-                             className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors"
-                           >
-                             Add
-                           </button>
-                       </div>
-                       
-                       {showSubtaskLinkInput[task.id] && (
-                           <input 
-                                type="text" 
-                                placeholder="Link URL (Optional)"
-                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 animate-in slide-in-from-top-1 fade-in duration-200"
-                                value={manualSubtaskLinks[task.id] || ''}
-                                onChange={(e) => handleManualSubtaskLinkChange(task.id, e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddManualSubtask(task.id)}
-                           />
-                       )}
-                    </div>
-                  )}
-
-                  {!isDone && (
-                    <div className="mt-4 pt-2 flex items-center gap-3 border-t border-slate-800">
-                        {/* Technical Breakdown */}
-                        <button
-                          onClick={() => handleGenerateSubtasks(task, 'technical')}
-                          disabled={isAiLoading === task.id}
-                          className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 transition-colors"
-                        >
-                          {isAiLoading === task.id ? (
-                              <div className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full" />
-                          ) : (
-                              <Wand2 size={14} />
-                          )}
-                          AI Breakdown (Technical)
-                        </button>
-
-                        {/* CSM Breakdown */}
-                        <button
-                          onClick={() => handleGenerateSubtasks(task, 'csm')}
-                          disabled={isAiLoading === task.id}
-                          className="text-xs font-medium text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
-                        >
-                          {isAiLoading === task.id ? (
-                              <div className="animate-spin h-3 w-3 border-2 border-emerald-400 border-t-transparent rounded-full" />
-                          ) : (
-                              <Briefcase size={14} />
-                          )}
-                          AI Breakdown (CSM)
-                        </button>
-                    </div>
-                  )}
+              )}
+            </div>
+            <div className="column-cards">
+              {filtered.filter((t) => t.status === status).map(taskCard)}
+              {!filtered.some((t) => t.status === status) && (
+                <div className="column-empty">
+                  {query || clientFilter !== "all"
+                    ? "No matching tasks"
+                    : status === "todo"
+                      ? "A fresh start. Add your first task."
+                      : status === "in-progress"
+                        ? "Ready for your next move."
+                        : "Good things take a little time."}
                 </div>
               )}
             </div>
-          );
-        })}
+            {status === "todo" && (
+              <button className="add-card" onClick={() => openForm()}>
+                <Plus size={16} /> Add a task
+              </button>
+            )}
+          </section>
+        ))}
       </div>
+      {formOpen && (
+        <Dialog
+          title={editing ? "A little fine-tuning." : "What’s the next move?"}
+          onClose={() => setFormOpen(false)}
+        >
+          <p className="dialog-description">
+            Give your task a clear name and a client. You can fill in the rest
+            as you go.
+          </p>
+          <form className="workspace-form" onSubmit={submit}>
+            <label>
+              Task name
+              <input
+                autoFocus
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Review endpoint security policies"
+              />
+            </label>
+            <div className="form-columns">
+              <label>
+                Client
+                <select
+                  required
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Select a client
+                  </option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Ticket number <span>optional</span>
+                <input
+                  value={ticketNumber}
+                  onChange={(e) => setTicketNumber(e.target.value)}
+                  placeholder="e.g. 10482"
+                />
+              </label>
+            </div>
+            {!clients.length && (
+              <p className="inline-notice">
+                Add a client in Clients before creating your first task.
+              </p>
+            )}
+            <label>
+              Description <span>optional</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What does done look like?"
+                rows={3}
+              />
+            </label>
+            <label>
+              Ticket link <span>optional</span>
+              <input
+                type="url"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder="https://"
+              />
+            </label>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setFormOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="button primary"
+                type="submit"
+                disabled={!title.trim() || !clientId}
+              >
+                {editing ? "Save changes" : "Create task"}
+                <ArrowUpRight size={16} />
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {pendingDelete && (
+        <Dialog
+          title="Delete this task?"
+          onClose={() => setPendingDelete(null)}
+        >
+          <p className="dialog-description">
+            “{pendingDelete.title}” and its subtasks will be removed. Existing
+            time entries stay in your history.
+          </p>
+          <div className="dialog-actions">
+            <button
+              className="button secondary"
+              onClick={() => setPendingDelete(null)}
+            >
+              Keep task
+            </button>
+            <button
+              className="button destructive"
+              onClick={() => {
+                onDeleteTask(pendingDelete.id);
+                setPendingDelete(null);
+              }}
+            >
+              Delete task
+            </button>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 };
-
-// Helper for Pause Icon reuse
-const PauseIcon = ({ size = 18 }: { size?: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="6" y="4" width="4" height="16" fill="currentColor" fillOpacity={0.2}></rect>
-    <rect x="14" y="4" width="4" height="16" fill="currentColor" fillOpacity={0.2}></rect>
-  </svg>
-);
-
 export default TaskBoard;

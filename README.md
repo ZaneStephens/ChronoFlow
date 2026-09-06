@@ -2,17 +2,21 @@
 
 A local-first time tracking and productivity app built for MSP IT professionals. Track billable hours in 6-minute increments, manage clients, plan your day, and generate AI-powered reports — all inside Microsoft Teams.
 
+## Workspace redesign
+
+The redesigned workspace centres on daily priorities, a searchable task board, project milestones and a dedicated focus space. See [docs/REDESIGN.md](docs/REDESIGN.md) for the review findings, compatibility contract and verification limits.
+
 ## Features
 
 - **7.6h Daily Goal** — Visual progress tracking with stat cards and charts
 - **6-Minute Billing** — Timer sessions auto-round to MSP-standard 6-minute blocks
-- **Task Board** — Kanban-style task management linked to clients and projects
+- **Task Board** — Searchable board and list layouts with client filters, status controls and subtasks
 - **AI Subtasks** — Break down tickets into actionable steps with Google Gemini
 - **Day Timeline** — 6AM–6PM visual planner with drag-to-move and recurring activities
-- **Week Overview** — 7-day bar chart with streak tracking and client distribution
-- **Activity Heatmap** — Monthly GitHub-style heatmap of tracked hours
+- **Week Overview** — Seven-day logged-hours chart in the daily overview
+- **Daily Overview** — Next actions, recent sessions and client time distribution
 - **Project Management** — Milestones, risks, and AI-generated roadmaps
-- **Quarterly Rocks** — 90-day OKR-style goals with key results
+- **Quarterly Goals** — Searchable rocks with quarter filters, key results and manual or AI-assisted creation
 - **Client Portfolio** — Color-coded clients with contact details and service agreements
 - **AI Reports** — Generate professional status emails or technical breakdowns
 - **Focus Mode** — Distraction-free timer view
@@ -22,16 +26,16 @@ A local-first time tracking and productivity app built for MSP IT professionals.
 
 ## Tech Stack
 
-| | |
-|---|---|
-| **Frontend** | React 19, TypeScript |
-| **Styling** | Tailwind CSS (CDN) |
-| **Charts** | Recharts |
-| **Icons** | Lucide React |
-| **AI** | Google Gemini (`@google/genai`) |
-| **Storage** | IndexedDB (auto-migrated from localStorage) |
-| **Build** | Vite |
-| **Deployment** | Netlify → Microsoft Teams iframe |
+|                |                                                 |
+| -------------- | ----------------------------------------------- |
+| **Frontend**   | React 19, TypeScript                            |
+| **Styling**    | Compiled Tailwind CSS + workspace design tokens |
+| **Charts**     | Recharts                                        |
+| **Icons**      | Lucide React                                    |
+| **AI**         | Google Gemini (`@google/genai`)                 |
+| **Storage**    | IndexedDB (auto-migrated from localStorage)     |
+| **Build**      | Vite                                            |
+| **Deployment** | Netlify → Microsoft Teams iframe                |
 
 ## Running Locally
 
@@ -49,10 +53,18 @@ API_KEY=your_gemini_api_key
 
 The key is read only by the Netlify Function at runtime and is never included in the browser bundle. For local AI development, use `netlify dev` so the `/api/gemini` route and environment variables are available.
 
-Start the dev server:
+Start the frontend (AI actions need `netlify dev`):
 
 ```bash
-netlify dev
+npm run dev
+```
+
+Validate the project:
+
+```bash
+npm run typecheck
+npm test
+npm run build
 ```
 
 ## Architecture
