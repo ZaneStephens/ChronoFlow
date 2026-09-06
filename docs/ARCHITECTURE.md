@@ -23,21 +23,21 @@ A single-page React + TypeScript time-tracking and productivity app built for an
 
 ## 2. Tech Stack
 
-| Layer | Technology | Notes |
-|-------|-----------|-------|
-| UI Framework | React 19 | Functional components, hooks only (except ErrorBoundary) |
-| Language | TypeScript | Strict mode, all types in `types.ts` |
-| Styling | Tailwind CSS (CDN) | Dark slate theme, loaded via `<script>` in index.html |
-| Charts | Recharts | Bar charts on Dashboard |
-| Icons | Lucide React | Used throughout all components |
-| AI | Google Gemini (`@google/genai`) | Subtask generation, report generation, project architecture |
-| Build | Vite | Import maps in index.html for CDN resolution |
-| Deployment | Netlify | `Netlify.toml` configures SPA redirects |
-| Storage | **IndexedDB** (via `storageService.ts`) | Migrated from localStorage; see §5 |
+| Layer        | Technology                              | Notes                                                          |
+| ------------ | --------------------------------------- | -------------------------------------------------------------- |
+| UI Framework | React 19                                | Functional components, hooks only (except ErrorBoundary)       |
+| Language     | TypeScript                              | Strict mode, all types in `types.ts`                           |
+| Styling      | Compiled Tailwind CSS                   | Warm workspace theme in `styles.css` and `tailwind.config.cjs` |
+| Charts       | Recharts                                | Bar charts on Dashboard                                        |
+| Icons        | Lucide React                            | Used throughout all components                                 |
+| AI           | Google Gemini (`@google/genai`)         | Subtask generation, report generation, project architecture    |
+| Build        | Vite                                    | Local npm dependencies, bundled CSS and JavaScript             |
+| Deployment   | Netlify                                 | `Netlify.toml` configures SPA redirects                        |
+| Storage      | **IndexedDB** (via `storageService.ts`) | Migrated from localStorage; see §5                             |
 
-### No node_modules
+### Local dependencies
 
-Dependencies resolve via **import maps** in `index.html` pointing to CDN URLs. There is a `package.json` but `node_modules` may not be installed locally. The TypeScript language server may report spurious "Cannot find module" errors — these do not affect runtime.
+Run `npm ci` from the committed lockfile. Vite bundles dependencies and PostCSS compiles Tailwind; no runtime CDN import maps are used.
 
 ---
 
@@ -139,23 +139,24 @@ All data flows through React Context. Components receive data and callbacks as p
 
 ### IndexedDB (`storageService.ts`)
 
-| Store Name | Content | Growth Pattern |
-|-----------|---------|---------------|
-| `clients` | Client[] | Low (tens) |
-| `projects` | Project[] | Low (tens) |
-| `customTemplates` | ProjectTemplate[] | Low |
-| `rocks` | Rock[] | Low (quarterly) |
-| `tasks` | Task[] | Medium (hundreds over time) |
-| `subtasks` | Subtask[] | Medium |
-| `plannedActivities` | PlannedActivity[] | Medium (daily) |
-| `recurringActivities` | RecurringActivity[] | Low |
-| `sessions` | TimerSession[] | **High** (multiple per day, never pruned) |
-| `activeTimer` | ActiveTimer \| null | Single value |
-| `_meta` | Migration flags | Internal |
+| Store Name            | Content             | Growth Pattern                            |
+| --------------------- | ------------------- | ----------------------------------------- |
+| `clients`             | Client[]            | Low (tens)                                |
+| `projects`            | Project[]           | Low (tens)                                |
+| `customTemplates`     | ProjectTemplate[]   | Low                                       |
+| `rocks`               | Rock[]              | Low (quarterly)                           |
+| `tasks`               | Task[]              | Medium (hundreds over time)               |
+| `subtasks`            | Subtask[]           | Medium                                    |
+| `plannedActivities`   | PlannedActivity[]   | Medium (daily)                            |
+| `recurringActivities` | RecurringActivity[] | Low                                       |
+| `sessions`            | TimerSession[]      | **High** (multiple per day, never pruned) |
+| `activeTimer`         | ActiveTimer \| null | Single value                              |
+| `_meta`               | Migration flags     | Internal                                  |
 
 ### Migration from localStorage
 
 On first app load, `migrateFromLocalStorage()` runs:
+
 1. Checks `_meta.migrated` flag in IndexedDB
 2. If not migrated: reads all localStorage keys, writes to IndexedDB stores, marks complete
 3. Removes old localStorage keys (keeps `hasSeenTutorial` — a UI flag)
@@ -199,21 +200,23 @@ User clicks Start → handleStartTimer()
 
 ### Session Modes (SessionModal)
 
-| Mode | Trigger | Behavior |
-|------|---------|----------|
-| `stop` | Stopping active timer | Timer data pre-filled, user adds notes |
-| `edit` | Clicking an existing session | Full edit of all fields |
-| `create` | Manual entry or project time log | Creates new session from scratch |
-| `log-plan` | Logging a planned task activity | Creates session from plan data |
+| Mode       | Trigger                          | Behavior                               |
+| ---------- | -------------------------------- | -------------------------------------- |
+| `stop`     | Stopping active timer            | Timer data pre-filled, user adds notes |
+| `edit`     | Clicking an existing session     | Full edit of all fields                |
+| `create`   | Manual entry or project time log | Creates new session from scratch       |
+| `log-plan` | Logging a planned task activity  | Creates session from plan data         |
 
 ---
 
 ## 7. Key Types (`types.ts`)
 
 ### ViewMode Enum
+
 `DASHBOARD | PROJECTS | ROCKS | TASKS | CLIENTS | TIMELINE | REPORTS | FOCUS`
 
 ### Core Entities
+
 - **Client**: `{ id, name, color, contactName?, contactEmail?, services?, isInternal? }`
 - **Task**: `{ id, clientId, projectId?, title, description, ticketNumber?, status, totalTime, createdAt, link? }`
 - **Subtask**: `{ id, taskId, title, isCompleted, totalTime, link? }`
@@ -232,12 +235,12 @@ The browser service sends generation requests to the `/api/gemini` Netlify Funct
 
 ### Capabilities
 
-| Function | Purpose | Used In |
-|----------|---------|---------|
-| `generateSubtasks()` | Break down task into 3–6 subtasks | TaskBoard |
-| `generateReport()` | Client status email or technical breakdown | ReportGenerator |
-| `architectProject()` | Generate milestones + risks for a project | ProjectManager |
-| `refineRock()` | Convert vague rock into SMART format with KRs | RockManager |
+| Function             | Purpose                                       | Used In         |
+| -------------------- | --------------------------------------------- | --------------- |
+| `generateSubtasks()` | Break down task into 3–6 subtasks             | TaskBoard       |
+| `generateReport()`   | Client status email or technical breakdown    | ReportGenerator |
+| `architectProject()` | Generate milestones + risks for a project     | ProjectManager  |
+| `refineRock()`       | Convert vague rock into SMART format with KRs | RockManager     |
 
 All functions include MSP context (internal vs external client) and use structured JSON output schemas.
 
@@ -249,13 +252,13 @@ All functions include MSP context (internal vs external client) and use structur
 
 The app runs inside Teams as an embedded tab. This means:
 
-| Constraint | Impact |
-|-----------|--------|
-| `Notification.requestPermission()` | **Will not work.** Use in-app toasts only. |
-| `Ctrl+K` keyboard shortcut | **Conflicts with Teams command bar.** Use `/` for search instead. |
-| `window.open()` | May be blocked. Avoid pop-ups. |
-| `document.cookie` | Limited. Use IndexedDB/localStorage. |
-| Cross-origin restrictions | Import maps resolve to CDN — works fine. |
+| Constraint                         | Impact                                                            |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `Notification.requestPermission()` | **Will not work.** Use in-app toasts only.                        |
+| `Ctrl+K` keyboard shortcut         | **Conflicts with Teams command bar.** Use `/` for search instead. |
+| `window.open()`                    | May be blocked. Avoid pop-ups.                                    |
+| `document.cookie`                  | Limited. Use IndexedDB/localStorage.                              |
+| Cross-origin restrictions          | Import maps resolve to CDN — works fine.                          |
 
 ### No Server / No Auth
 
@@ -267,13 +270,12 @@ The app runs inside Teams as an embedded tab. This means:
 
 ## 10. Styling Conventions
 
-- **Color palette**: Slate-900 background, Slate-800 cards, Indigo-500/600 primary, Emerald for success, Amber for warning, Rose/Red for danger
-- **Padding**: All main views have `p-6` on their root container
-- **Cards**: `bg-slate-800 border border-slate-700 rounded-xl p-6`
-- **Buttons (primary)**: `bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg`
-- **Buttons (ghost)**: `text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg`
-- **Font**: Inter (system-ui fallback) via Tailwind config
-- **Labels**: `text-[10px] uppercase tracking-wider text-slate-500 font-bold` for stat labels
+- `styles.css` defines the responsive workspace shell, typography, controls, panels and feature layouts.
+- `tailwind.config.cjs` defines semantic tokens (`canvas`, `surface`, `inset`, `line`, `ink`, `body`, `muted`, `quiet`) used by retained detail views.
+- The primary palette is forest green with warm neutral surfaces. Georgia editorial headings complement system sans-serif body text.
+- Use `components/ui/Dialog.tsx` for native modal focus containment, Escape dismissal and focus restoration.
+- Main views must remain accessible from the mobile navigation. Preserve the single-key `/` search shortcut and iframe constraints.
+- Refer to `docs/REDESIGN.md` before changing storage, JSON backups or the six-column day CSV.
 
 ---
 

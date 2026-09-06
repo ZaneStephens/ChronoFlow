@@ -1,464 +1,475 @@
-
-import React, { useEffect, useState, useMemo } from 'react';
-import { Task, TimerSession, Client, ActiveTimer, Project } from '../types';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Clock, CheckCircle2, TrendingUp, Target, Activity, AlertTriangle, AlertCircle, BarChart3, Users, UserCheck } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import {
+  Task,
+  TimerSession,
+  Client,
+  ActiveTimer,
+  Project,
+  PlannedActivity,
+  ViewMode,
+} from "../types";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  CalendarDays,
+  Check,
+  Clock3,
+  Plus,
+  Play,
+  Square,
+  Target,
+  Timer,
+  CheckCircle2,
+} from "lucide-react";
+import {
+  dayBounds,
+  durationLabel,
+  sessionSecondsInRange,
+} from "../services/workspaceMetrics";
 
 interface DashboardProps {
   tasks: Task[];
   clients: Client[];
-  projects?: Project[];
+  projects: Project[];
   sessions: TimerSession[];
   activeTimer: ActiveTimer | null;
-  onStartTimer?: (taskId?: string, subtaskId?: string) => void;
-  children?: React.ReactNode;
+  plannedActivities: PlannedActivity[];
+  onStartTimer: (taskId?: string) => void;
+  onStopTimer: () => void;
+  onNavigate: (view: ViewMode) => void;
+  onEditSession: (session: TimerSession) => void;
+  onManualEntry: () => void;
+  onPlan: () => void;
+  onCompleteTask: (task: Task) => void;
 }
-
-const Dashboard: React.FC<DashboardProps> = ({ tasks, clients, projects = [], sessions, activeTimer, children }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+  tasks,
+  clients,
+  projects,
+  sessions,
+  activeTimer,
+  plannedActivities,
+  onStartTimer,
+  onStopTimer,
+  onNavigate,
+  onEditSession,
+  onManualEntry,
+  onPlan,
+  onCompleteTask,
+}) => {
   const [now, setNow] = useState(Date.now());
-
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
-
-  // Constants
-  const DAILY_GOAL_HOURS = 7.6; // 7h 36m
-  const DAILY_GOAL_SECONDS = DAILY_GOAL_HOURS * 3600;
-
-  // Stats Calculation
-  const totalSecondsTasks = tasks.reduce((acc, t) => acc + t.totalTime, 0); 
-  const totalSecondsQuick = sessions
-    .filter(s => !s.taskId && s.endTime)
-    .reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
-
-  const totalSeconds = totalSecondsTasks + totalSecondsQuick;
-  const activeDuration = activeTimer ? Math.floor((now - activeTimer.startTime) / 1000) : 0;
-  const validActiveDuration = Math.max(0, activeDuration);
-  const displayTotalSeconds = totalSeconds + validActiveDuration;
-  const totalHours = (displayTotalSeconds / 3600).toFixed(1);
-  const completedTasks = tasks.filter(t => t.status === 'done').length;
-  const activeExternalClientsCount = clients.filter(c => !c.isInternal).length;
-  
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  
-  const todaySecondsCompleted = sessions.reduce((acc, session) => {
-    if (session.startTime >= startOfToday.getTime()) {
-      const end = session.endTime || now;
-      return acc + ((end - session.startTime) / 1000);
-    }
-    return acc;
-  }, 0);
-
-  const activeSecondsToday = (activeTimer && activeTimer.startTime >= startOfToday.getTime()) 
-    ? validActiveDuration 
+  const [start, end] = dayBounds(now);
+  const todaySessions = sessions
+    .filter((s) => s.startTime >= start && s.startTime < end && s.endTime)
+    .sort((a, b) => b.startTime - a.startTime);
+  const logged = sessionSecondsInRange(sessions, start, end);
+  const running = activeTimer
+    ? Math.max(0, (now - Math.max(activeTimer.startTime, start)) / 1000)
     : 0;
-
-  const totalTodaySeconds = todaySecondsCompleted + activeSecondsToday;
-  const todayProgressPercent = Math.min((totalTodaySeconds / DAILY_GOAL_SECONDS) * 100, 100);
-  const remainingSeconds = Math.max(DAILY_GOAL_SECONDS - totalTodaySeconds, 0);
-
-  const chartData = useMemo(() => {
-    const data: any[] = [];
-    let internalHours = 0;
-
-    clients.forEach(client => {
-      const clientTasks = tasks.filter(t => t.clientId === client.id);
-      const taskSeconds = clientTasks.reduce((acc, t) => acc + t.totalTime, 0);
-      const quickSessions = sessions.filter(s => !s.taskId && s.clientId === client.id && s.endTime);
-      const quickSeconds = quickSessions.reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
-
-      let additional = 0;
-      if (activeTimer) {
-         const activeTask = tasks.find(t => t.id === activeTimer.taskId);
-         if (activeTask && activeTask.clientId === client.id) {
-           additional = validActiveDuration;
-         }
-      }
-
-      const totalH = parseFloat(((taskSeconds + quickSeconds + additional) / 3600).toFixed(2));
-
-      if (client.isInternal) {
-        internalHours += totalH;
-      } else {
-        if (totalH > 0) {
-            data.push({ name: client.name, hours: totalH, color: client.color });
-        }
-      }
-    });
-
-    if (internalHours > 0) {
-      data.push({ name: 'Internal Work', hours: parseFloat(internalHours.toFixed(2)), color: '#94a3b8' });
-    }
-    
-    const unassignedQuickSeconds = sessions
-        .filter(s => !s.taskId && !s.clientId && s.endTime)
-        .reduce((acc, s) => acc + (s.endTime! - s.startTime) / 1000, 0);
-
-    if (unassignedQuickSeconds > 0) {
-        data.push({
-            name: 'Unassigned',
-            hours: parseFloat((unassignedQuickSeconds / 3600).toFixed(2)),
-            color: '#10b981'
-        });
-    }
-
-    return data;
-  }, [clients, tasks, sessions, activeTimer, validActiveDuration]);
-
-  const formatDuration = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
-  };
-
-  const stripHtml = (html: string) => {
-    const tmp = document.createElement("DIV");
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || "";
-  };
-
-  const [insightsClientId, setInsightsClientId] = useState('');
-
-  // ── Client Insights Data ──
-  const insightsData = useMemo(() => {
-    const relevantTasks = insightsClientId
-      ? tasks.filter(t => t.clientId === insightsClientId)
-      : tasks.filter(t => clients.find(c => c.id === t.clientId && !c.isInternal));
-
-    const relevantClientIds = insightsClientId
-      ? [insightsClientId]
-      : clients.filter(c => !c.isInternal).map(c => c.id);
-
-    const relevantSessions = sessions.filter(s =>
-      s.endTime && (s.clientId && relevantClientIds.includes(s.clientId)) ||
-      (s.taskId && relevantTasks.find(t => t.id === s.taskId))
+  const total = logged + running;
+  const goal = 7.6 * 3600;
+  const openTasks = tasks
+    .filter((t) => t.status !== "done")
+    .sort(
+      (a, b) =>
+        Number(b.status === "in-progress") -
+          Number(a.status === "in-progress") || b.createdAt - a.createdAt,
     );
-
-    // Top Tasks
-    const taskTimeMap = new Map<string, number>();
-    relevantSessions.forEach(s => {
-      const tId = s.taskId;
-      if (tId) {
-        const dur = (s.endTime! - s.startTime) / 1000;
-        taskTimeMap.set(tId, (taskTimeMap.get(tId) || 0) + dur);
-      }
-    });
-    const topTasks = Array.from(taskTimeMap.entries())
-      .map(([taskId, seconds]) => ({
-        taskId,
-        title: tasks.find(t => t.id === taskId)?.title || 'Unknown',
-        seconds
-      }))
-      .sort((a, b) => b.seconds - a.seconds);
-
-    // Keyword Distribution
-    const STOP_WORDS = new Set([
-      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-      'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-      'it', 'its', 'this', 'that', 'these', 'those', 'not', 'no', 'also',
-      'has', 'had', 'have', 'do', 'does', 'did', 'will', 'would', 'could',
-      'should', 'may', 'might', 'can', 'just', 'need', 'needs', 'like',
-    ]);
-    const wordTimeMap = new Map<string, number>();
-    relevantSessions.forEach(s => {
-      if (!s.notes) return;
-      const plainText = stripHtml(s.notes).toLowerCase();
-      const words = plainText.split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !STOP_WORDS.has(w));
-      const dur = (s.endTime! - s.startTime) / 1000;
-      words.forEach(w => {
-        wordTimeMap.set(w, (wordTimeMap.get(w) || 0) + dur);
-      });
-    });
-    const maxKeywordSec = Math.max(...Array.from(wordTimeMap.values()), 1);
-    const keywords = Array.from(wordTimeMap.entries())
-      .map(([word, seconds]) => ({ word, seconds, pct: (seconds / maxKeywordSec) * 100 }))
-      .sort((a, b) => b.seconds - a.seconds);
-
-    // Micro-tasking Warning
-    const clientSessionCounts = relevantSessions.length;
-    const totalClientMinutes = relevantSessions.reduce((acc, s) => acc + ((s.endTime! - s.startTime) / 60000), 0);
-    const avgMinutes = clientSessionCounts > 0 ? totalClientMinutes / clientSessionCounts : 0;
-    const microTasking = {
-      active: clientSessionCounts > 5 && avgMinutes < 15,
-      count: clientSessionCounts,
-      avgMinutes
-    };
-
-    // Runaway Tasks (>10h in-progress)
-    const runawayTasks = relevantTasks.filter(t =>
-      t.status === 'in-progress' && t.totalTime > 36000
-    );
-
-    // Active Risks (High/Medium on active projects)
-    const relevantProjects = insightsClientId
-      ? projects.filter(p => p.clientId === insightsClientId && (p.status === 'active' || p.status === 'planning'))
-      : projects.filter(p => relevantClientIds.includes(p.clientId) && (p.status === 'active' || p.status === 'planning'));
-    const activeRisks = relevantProjects.reduce((acc, p) =>
-      acc + p.risks.filter(r => r.impact === 'High' || r.impact === 'Medium').length, 0
-    );
-
-    // Stuck Tasks (>5h, todo/in-progress, created >14 days ago)
-    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
-    const stuckTasks = relevantTasks.filter(t =>
-      (t.status === 'todo' || t.status === 'in-progress') &&
-      t.totalTime > 18000 &&
-      t.createdAt < fourteenDaysAgo
-    );
-
-    return { topTasks, keywords, microTasking, runawayTasks, activeRisks, stuckTasks };
-  }, [tasks, sessions, clients, projects, insightsClientId, stripHtml]);
-
-  const StatCard = ({ title, value, icon: Icon, bgColor, textColor, subtext }: { title: string, value: string | number, icon: any, bgColor: string, textColor: string, subtext?: string }) => (
-    <div className="bg-slate-800 border border-slate-700 p-6 rounded-xl flex items-start justify-between">
-      <div>
-        <p className="text-slate-400 text-sm font-medium mb-1">{title}</p>
-        <h3 className="text-3xl font-bold text-white">{value}</h3>
-        {subtext && <p className="text-xs text-slate-500 mt-1">{subtext}</p>}
-      </div>
-      <div className={`p-3 rounded-lg ${bgColor}`}>
-        <Icon size={24} className={textColor} />
-      </div>
-    </div>
-  );
-
+  const currentTask = tasks.find((t) => t.id === activeTimer?.taskId);
+  const todayPlans = plannedActivities
+    .filter((p) => p.startTime >= start && p.startTime < end && !p.isLogged)
+    .sort((a, b) => a.startTime - b.startTime);
+  const clientTime = clients
+    .map((client) => ({
+      client,
+      seconds: sessionSecondsInRange(
+        sessions.filter(
+          (s) =>
+            (tasks.find((t) => t.id === s.taskId)?.clientId || s.clientId) ===
+            client.id,
+        ),
+        start,
+        end,
+      ),
+    }))
+    .filter((x) => x.seconds > 0)
+    .sort((a, b) => b.seconds - a.seconds);
+  const clientSeconds = clientTime
+    .filter((x) => !x.client.isInternal)
+    .reduce((sum, x) => sum + x.seconds, 0);
+  const activeProjects = projects.filter((p) => p.status !== "completed");
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(start);
+    date.setDate(date.getDate() - ((date.getDay() + 6) % 7) + i);
+    const [a, b] = dayBounds(date.getTime());
+    return { start: a, hours: sessionSecondsInRange(sessions, a, b) / 3600 };
+  });
+  const maxWeekHours = Math.max(7.6, ...week.map((day) => day.hours));
+  const greeting =
+    new Date(now).getHours() < 12
+      ? "Good morning."
+      : new Date(now).getHours() < 17
+        ? "Good afternoon."
+        : "Good evening.";
   return (
-    <div className="space-y-8 p-6">
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-2">Dashboard</h2>
-        <p className="text-slate-400 text-sm">Track your daily progress towards the 7.6h goal.</p>
+    <div className="workspace-page overview-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">YOUR WORK, AT A GLANCE</p>
+          <h1>
+            {greeting} <span>Make today count.</span>
+          </h1>
+          <p>A clear head starts with a clear view of your day.</p>
+        </div>
+        <button className="button secondary" onClick={onPlan}>
+          <CalendarDays size={17} /> Plan my day
+        </button>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-slate-800 border border-slate-700 p-6 rounded-xl relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-             <div>
-                <p className="text-slate-400 text-sm font-medium mb-1">Daily Goal (7.6h)</p>
-                <h3 className="text-3xl font-bold text-white">{formatDuration(totalTodaySeconds)}</h3>
-             </div>
-             <div className="p-3 rounded-lg bg-emerald-500/20 text-emerald-400">
-                <Target size={24} />
-             </div>
+      <section className="day-banner" aria-label="Daily time goal">
+        <div className="day-banner-copy">
+          <span className="eyebrow">TODAY’S MOMENTUM</span>
+          <div className="daily-total">
+            {durationLabel(total)}
+            <span> / 7h 36m</span>
           </div>
-          <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-emerald-500 transition-all duration-1000"
-              style={{ width: `${todayProgressPercent}%` }}
+          <p>
+            {total >= goal
+              ? "Daily goal reached. That’s good work."
+              : `${durationLabel(goal - total)} left to reach your daily goal.`}
+          </p>
+        </div>
+        <div className="day-banner-progress">
+          <div className="progress-heading">
+            <span>Every little block adds up.</span>
+            <strong>{Math.round((total / goal) * 100)}%</strong>
+          </div>
+          <div
+            className="day-progress"
+            role="progressbar"
+            aria-label="Daily time goal"
+            aria-valuenow={Math.min(100, Math.round((total / goal) * 100))}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <span
+              style={{ width: `${Math.min(100, (total / goal) * 100)}%` }}
             />
           </div>
-          <p className="text-xs text-slate-500 mt-2 text-right">{formatDuration(remainingSeconds)} remaining</p>
+          <div className="progress-key">
+            <span>
+              <i /> Logged time <b>{durationLabel(logged)}</b>
+            </span>
+            {activeTimer && (
+              <span>
+                Running <b>{durationLabel(running)}</b>
+              </span>
+            )}
+            <span>6-minute billing blocks</span>
+          </div>
         </div>
-
-        <StatCard title="Total Tracked" value={`${totalHours}h`} icon={Clock} bgColor="bg-blue-500/20" textColor="text-blue-400" subtext="Lifetime total" />
-        <StatCard title="Completed Tasks" value={completedTasks} icon={CheckCircle2} bgColor="bg-indigo-500/20" textColor="text-indigo-400" />
-        <StatCard title="Active Clients" value={activeExternalClientsCount} icon={TrendingUp} bgColor="bg-purple-500/20" textColor="text-purple-400" subtext="External only" />
+      </section>
+      <div className="stat-strip">
+        <div>
+          <span>
+            <Clock3 size={16} /> Client work today
+          </span>
+          <strong>{durationLabel(clientSeconds)}</strong>
+          <small>
+            {clientTime.filter((x) => !x.client.isInternal).length} clients
+            supported
+          </small>
+        </div>
+        <div>
+          <span>
+            <CheckCircle2 size={16} /> Open tasks
+          </span>
+          <strong>
+            {openTasks.length}
+            <small>to move forward</small>
+          </strong>
+          <small>
+            {tasks.filter((t) => t.status === "in-progress").length} in progress
+          </small>
+        </div>
+        <div>
+          <span>
+            <Target size={16} /> Active projects
+          </span>
+          <strong>
+            {activeProjects.length}
+            <small>in your workspace</small>
+          </strong>
+          <small>
+            {
+              activeProjects.filter(
+                (p) =>
+                  p.dueDate &&
+                  new Date(p.dueDate + "T23:59:59").getTime() < now,
+              ).length
+            }{" "}
+            past due date
+          </small>
+        </div>
       </div>
-
-      {children}
-
-      <div className="grid lg:grid-cols-3 gap-8 h-full">
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 h-96">
-            <h3 className="text-lg font-semibold text-white mb-6">Time Distribution by Client</h3>
-            <div className="h-full pb-8">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" interval={0} height={80} />
-                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}h`} />
-                  <Tooltip 
-                    cursor={{fill: '#334155', opacity: 0.4}}
-                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
-                    itemStyle={{ color: '#cbd5e1' }}
-                  />
-                  <Bar dataKey="hours" radius={[4, 4, 0, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 h-fit">
-          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-            <Activity size={20} className="text-indigo-400" />
-            Recent Activity
-          </h3>
-          <div className="space-y-4">
-            {sessions.slice().reverse().slice(0, 8).map(session => {
-              const task = session.taskId ? tasks.find(t => t.id === session.taskId) : null;
-              const duration = session.endTime ? ((session.endTime - session.startTime) / 1000) : 0;
-              const isToday = session.startTime >= startOfToday.getTime();
-
-              return (
-                <div key={session.id} className="flex items-center gap-3 pb-3 border-b border-slate-700/50 last:border-0 last:pb-0">
-                  <div className={`w-2 h-2 rounded-full mt-1 ${isToday ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-200 truncate">{task ? task.title : (session.customTitle || 'Quick Log')}</p>
-                    <p className="text-xs text-slate-500 flex justify-between">
-                      <span>{isToday ? 'Today' : new Date(session.startTime).toLocaleDateString()}</span>
-                      {session.notes && <span className="truncate max-w-[100px] ml-2 text-slate-600 italic">{stripHtml(session.notes)}</span>}
-                    </p>
-                  </div>
-                  <div className="text-xs font-mono text-slate-400">
-                    {session.endTime ? `${Math.round(duration / 60)}m` : 'Active'}
-                  </div>
-                </div>
-              );
-            })}
-            {sessions.length === 0 && <p className="text-slate-500 text-sm">No recent activity recorded.</p>}
-          </div>
-        </div>
-</div>
-
-      {/* ── Client Insights & Pain Points ── */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            <BarChart3 size={20} className="text-indigo-400" />
-            Client Insights & Pain Points
-          </h3>
-          <select
-            value={insightsClientId}
-            onChange={(e) => setInsightsClientId(e.target.value)}
-            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-          >
-            <option value="">All Clients</option>
-            {clients.filter(c => !c.isInternal).map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {insightsData && (
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Top Tasks */}
-            <div className="bg-slate-900/30 rounded-lg p-4 border border-slate-700/50">
-              <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <TrendingUp size={16} className="text-blue-400" />
-                Most Time-Consuming Tasks
-              </h4>
-              <div className="space-y-2">
-                {insightsData.topTasks.length === 0 && (
-                  <p className="text-slate-500 text-sm">No tracked tasks for this client.</p>
-                )}
-                {insightsData.topTasks.slice(0, 5).map((item, i) => (
-                  <div key={item.taskId} className="flex items-center justify-between text-sm">
-                    <span className="text-slate-300 truncate flex-1">
-                      <span className="text-slate-500 mr-2 font-mono text-xs">{i + 1}.</span>
-                      {item.title}
-                    </span>
-                    <span className="text-white font-mono text-xs ml-3 shrink-0">{formatDuration(item.seconds)}</span>
-                  </div>
-                ))}
+      <div className="overview-columns">
+        <div className="overview-primary">
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">ONE THING AT A TIME</p>
+                <h2>Up next</h2>
               </div>
+              <button
+                className="text-button"
+                onClick={() => onNavigate(ViewMode.TASKS)}
+              >
+                All tasks <ArrowUpRight size={16} />
+              </button>
             </div>
-
-            {/* Keyword Distribution */}
-            <div className="bg-slate-900/30 rounded-lg p-4 border border-slate-700/50">
-              <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <Activity size={16} className="text-emerald-400" />
-                Notes Keyword Distribution
-              </h4>
-              <div className="space-y-2">
-                {insightsData.keywords.length === 0 && (
-                  <p className="text-slate-500 text-sm">No session notes to analyze for this client.</p>
-                )}
-                {insightsData.keywords.slice(0, 8).map((kw) => (
-                  <div key={kw.word} className="flex items-center gap-3">
-                    <div className="flex-1 h-5 bg-slate-800 rounded-full overflow-hidden relative">
-                      <div
-                        className="h-full bg-indigo-500/60 rounded-full transition-all"
-                        style={{ width: `${Math.min(kw.pct, 100)}%` }}
-                      />
-                      <span className="absolute inset-0 flex items-center px-2 text-xs text-slate-200 truncate">
-                        {kw.word}
+            <div className="priority-list">
+              {openTasks.slice(0, 4).map((task) => {
+                const client = clients.find((c) => c.id === task.clientId);
+                const isRunning = activeTimer?.taskId === task.id;
+                return (
+                  <div className="priority-row" key={task.id}>
+                    <button
+                      className="complete-control"
+                      aria-label={`Complete ${task.title}`}
+                      onClick={() =>
+                        onCompleteTask({ ...task, status: "done" })
+                      }
+                    >
+                      <Check size={15} />
+                    </button>
+                    <div className="row-copy">
+                      <strong>{task.title}</strong>
+                      <span>
+                        <i
+                          className="client-dot"
+                          style={{ background: client?.color || "#768879" }}
+                        />
+                        {client?.name || "Unassigned"}
+                        {task.ticketNumber && ` · #${task.ticketNumber}`}
                       </span>
                     </div>
-                    <span className="text-xs font-mono text-slate-400 shrink-0 w-12 text-right">
-                      {formatDuration(kw.seconds)}
+                    <span className={`status-pill ${task.status}`}>
+                      {task.status === "in-progress" ? "In progress" : "To do"}
                     </span>
+                    <button
+                      className={`icon-button ${isRunning ? "running" : ""}`}
+                      aria-label={`${isRunning ? "Stop" : "Start"} ${task.title}`}
+                      onClick={() =>
+                        isRunning ? onStopTimer() : onStartTimer(task.id)
+                      }
+                    >
+                      {isRunning ? <Square size={16} /> : <Play size={16} />}
+                    </button>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+              {!openTasks.length && (
+                <div className="empty-state">
+                  <CheckCircle2 size={28} />
+                  <h3>A little room to breathe.</h3>
+                  <p>Add a task to give your next block of time a purpose.</p>
+                  <button
+                    className="button secondary"
+                    onClick={() => onNavigate(ViewMode.TASKS)}
+                  >
+                    <Plus size={16} /> Add your first task
+                  </button>
+                </div>
+              )}
             </div>
-
-            {/* Pain Points */}
-            <div className="lg:col-span-2 bg-slate-900/30 rounded-lg p-4 border border-slate-700/50">
-              <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <AlertTriangle size={16} className="text-amber-400" />
-                Pain Points & Warnings
-              </h4>
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Micro-tasking */}
-                <div className={`rounded-lg p-3 border ${insightsData.microTasking.active ? 'bg-amber-500/10 border-amber-500/30' : 'bg-slate-800/50 border-slate-700/30'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <AlertCircle size={14} className={insightsData.microTasking.active ? 'text-amber-400' : 'text-slate-500'} />
-                    <span className={`text-xs font-bold uppercase ${insightsData.microTasking.active ? 'text-amber-300' : 'text-slate-500'}`}>
-                      Micro-tasking
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {insightsData.microTasking.active
-                      ? `${insightsData.microTasking.count} sessions avg ${Math.round(insightsData.microTasking.avgMinutes)}m — high context switching`
-                      : 'No excessive context switching detected'}
-                  </p>
-                </div>
-
-                {/* Runaway Tasks */}
-                <div className={`rounded-lg p-3 border ${insightsData.runawayTasks.length > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800/50 border-slate-700/30'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <AlertTriangle size={14} className={insightsData.runawayTasks.length > 0 ? 'text-red-400' : 'text-slate-500'} />
-                    <span className={`text-xs font-bold uppercase ${insightsData.runawayTasks.length > 0 ? 'text-red-300' : 'text-slate-500'}`}>
-                      Runaway Tasks
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {insightsData.runawayTasks.length > 0
-                      ? `${insightsData.runawayTasks.length} task${insightsData.runawayTasks.length !== 1 ? 's' : ''} > 10h in-progress`
-                      : 'No runaway tasks detected'}
-                  </p>
-                </div>
-
-                {/* Active Risks */}
-                <div className={`rounded-lg p-3 border ${insightsData.activeRisks > 0 ? 'bg-rose-500/10 border-rose-500/30' : 'bg-slate-800/50 border-slate-700/30'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Users size={14} className={insightsData.activeRisks > 0 ? 'text-rose-400' : 'text-slate-500'} />
-                    <span className={`text-xs font-bold uppercase ${insightsData.activeRisks > 0 ? 'text-rose-300' : 'text-slate-500'}`}>
-                      Active Risks
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {insightsData.activeRisks > 0
-                      ? `${insightsData.activeRisks} High/Medium risk${insightsData.activeRisks !== 1 ? 's' : ''} on active projects`
-                      : 'No active risks'}
-                  </p>
-                </div>
-
-                {/* Stuck Tasks */}
-                <div className={`rounded-lg p-3 border ${insightsData.stuckTasks.length > 0 ? 'bg-orange-500/10 border-orange-500/30' : 'bg-slate-800/50 border-slate-700/30'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <UserCheck size={14} className={insightsData.stuckTasks.length > 0 ? 'text-orange-400' : 'text-slate-500'} />
-                    <span className={`text-xs font-bold uppercase ${insightsData.stuckTasks.length > 0 ? 'text-orange-300' : 'text-slate-500'}`}>
-                      Stuck Tasks
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {insightsData.stuckTasks.length > 0
-                      ? `${insightsData.stuckTasks.length} task${insightsData.stuckTasks.length !== 1 ? 's' : ''} > 5h for 14+ days`
-                      : 'No stuck tasks'}
-                  </p>
-                </div>
+          </section>
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">THE WORK YOU’VE PUT IN</p>
+                <h2>
+                  Today’s activity{" "}
+                  <span className="count-badge">{todaySessions.length}</span>
+                </h2>
               </div>
+              <button className="text-button" onClick={onManualEntry}>
+                <Plus size={16} /> Log time
+              </button>
             </div>
-          </div>
-        )}
+            {todaySessions.length ? (
+              <div className="activity-list">
+                {todaySessions.slice(0, 5).map((s) => {
+                  const task = tasks.find((t) => t.id === s.taskId);
+                  const client = clients.find(
+                    (c) => c.id === (task?.clientId || s.clientId),
+                  );
+                  return (
+                    <button
+                      className="activity-row"
+                      key={s.id}
+                      onClick={() => onEditSession(s)}
+                    >
+                      <span className="activity-time">
+                        {new Date(s.startTime).toLocaleTimeString("en-AU", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: false,
+                        })}
+                      </span>
+                      <span
+                        className="activity-marker"
+                        style={{ background: client?.color || "#a9b6a9" }}
+                      />
+                      <span className="row-copy">
+                        <strong>
+                          {s.customTitle || task?.title || "Quick entry"}
+                        </strong>
+                        <span>
+                          {client?.name || "Unassigned"}
+                          {s.isManualLog
+                            ? " · Manual entry"
+                            : " · Tracked session"}
+                        </span>
+                      </span>
+                      <span className="duration-text">
+                        {durationLabel((s.endTime! - s.startTime) / 1000)}
+                      </span>
+                      <ArrowUpRight size={15} />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="empty-state compact">
+                <Clock3 size={25} />
+                <h3>Your day is a blank page.</h3>
+                <p>Start a timer or log work you’ve already done.</p>
+              </div>
+            )}
+            <button
+              className="panel-footer"
+              onClick={() => onNavigate(ViewMode.TIMELINE)}
+            >
+              Open your full day <ArrowRight size={16} />
+            </button>
+          </section>
+        </div>
+        <div className="overview-secondary">
+          <section className={`timer-card ${activeTimer ? "is-running" : ""}`}>
+            <div className="timer-card-top">
+              <Timer size={21} />
+              <span>{activeTimer ? "IN YOUR FLOW" : "FIND YOUR FLOW"}</span>
+              {activeTimer && <span className="live-dot" />}
+            </div>
+            <h2>
+              {activeTimer
+                ? currentTask?.title || "A moment of focused work"
+                : "Ready when you are."}
+            </h2>
+            <p>
+              {activeTimer
+                ? "One task. Your full attention."
+                : "Give your next task a little undivided attention."}
+            </p>
+            {activeTimer && (
+              <div className="mini-clock">{durationLabel(running)}</div>
+            )}
+            <button
+              className="button timer-action"
+              onClick={() => (activeTimer ? onStopTimer() : onStartTimer())}
+            >
+              {activeTimer ? <Square size={15} /> : <Play size={15} />}
+              {activeTimer ? "Finish session" : "Start a timer"}
+            </button>
+            <button
+              className="timer-focus"
+              onClick={() => onNavigate(ViewMode.FOCUS)}
+            >
+              Enter focus space <ArrowUpRight size={14} />
+            </button>
+          </section>
+          <section className="panel week-panel">
+            <div className="section-heading">
+              <h2>This week</h2>
+              <span className="muted">Logged hours</span>
+            </div>
+            <div
+              className="week-bars"
+              role="img"
+              aria-label="Logged hours for each day this week"
+            >
+              {week.map((day, i) => (
+                <div
+                  className={`week-day ${day.start === start ? "today" : ""}`}
+                  key={i}
+                >
+                  <span>{day.hours ? day.hours.toFixed(1) : "—"}</span>
+                  <div className="week-bar-track">
+                    <div
+                      style={{ height: `${(day.hours / maxWeekHours) * 100}%` }}
+                    />
+                  </div>
+                  <span>{["M", "T", "W", "T", "F", "S", "S"][i]}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="panel distribution-panel">
+            <div className="section-heading">
+              <h2>Where time went</h2>
+              <span className="muted">Today</span>
+            </div>
+            {clientTime.length ? (
+              clientTime.slice(0, 4).map(({ client, seconds }) => (
+                <div className="client-allocation" key={client.id}>
+                  <div>
+                    <span>
+                      <i
+                        className="client-dot"
+                        style={{ background: client.color }}
+                      />
+                      {client.name}
+                    </span>
+                    <strong>{durationLabel(seconds)}</strong>
+                  </div>
+                  <div className="allocation-track">
+                    <span
+                      style={{
+                        width: `${Math.min(100, (seconds / Math.max(1, logged)) * 100)}%`,
+                        background: client.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="quiet-copy">
+                Your client breakdown will appear as you log time.
+              </p>
+            )}
+          </section>
+          {todayPlans.length > 0 && (
+            <button
+              className="upcoming-note"
+              onClick={() => onNavigate(ViewMode.TIMELINE)}
+            >
+              <CalendarDays size={20} />
+              <span>
+                <strong>{todayPlans.length} planned activities</strong>
+                <small>Check what’s ahead in My day</small>
+              </span>
+              <ArrowRight size={17} />
+            </button>
+          )}
+        </div>
       </div>
+      <footer className="page-footer">
+        Less busywork. More good work.<span>YOUR TIME, WELL SPENT.</span>
+      </footer>
     </div>
   );
 };
-
 export default Dashboard;
