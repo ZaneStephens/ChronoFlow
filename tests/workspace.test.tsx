@@ -566,3 +566,41 @@ test("gap actions escape the timeline stack, dismiss with Escape, and cannot bac
   await user.click(screen.getByRole("button", { name: "Previous day" }));
   assert.equal(screen.queryByRole("group", { name: "Fill gap actions" }), null);
 });
+
+for (const hour of [13, 18]) {
+  test(`manual log after the final entry opens despite an overlapping plan at ${hour}:50`, async () => {
+    const end = new Date(today);
+    end.setHours(hour, 50, 0, 0);
+    const session = {
+      ...fixture.sessions[0],
+      startTime: end.getTime() - 25 * 60000,
+      endTime: end.getTime(),
+    };
+    const plan = {
+      ...fixture.plannedActivities[0],
+      startTime: session.startTime,
+      durationMinutes: 90,
+    };
+    await setManyStores({
+      sessions: [session],
+      plannedActivities: [plan],
+      recurringActivities: [],
+    });
+    await boot();
+    await user.click(screen.getByRole("button", { name: "My day" }));
+    await user.click(screen.getByTitle("Fill gap after"));
+    await user.click(screen.getByRole("button", { name: "Manual Log" }));
+    await screen.findByRole("dialog");
+    assert.equal(
+      (screen.getByLabelText("Start time") as HTMLInputElement).value,
+      `${hour}:50`,
+    );
+    assert.equal(
+      (screen.getByLabelText("End time") as HTMLInputElement).value,
+      `${hour + 1}:20`,
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    assert.deepEqual((await getAllStores()).sessions, [session]);
+    assert.deepEqual((await getAllStores()).plannedActivities, [plan]);
+  });
+}

@@ -322,13 +322,13 @@ const Timeline: React.FC<TimelineProps> = ({
     });
   };
 
-  const getBusyRanges = () => {
+  const getBusyRanges = (includePlans = true) => {
     return [
       ...daySessions.map((s) => ({
         start: s.startTime,
         end: s.endTime || Date.now(),
       })),
-      ...dayPlans.map((p) => ({
+      ...(includePlans ? dayPlans : []).map((p) => ({
         start: p.startTime,
         end: p.startTime + p.durationMinutes * 60 * 1000,
       })),
@@ -338,11 +338,12 @@ const Timeline: React.FC<TimelineProps> = ({
   const calculateSafeDuration = (
     startTime: number,
     maxDesiredMinutes: number = 30,
+    includePlans = true,
   ): number => {
-    const busyRanges = getBusyRanges();
-    const nextBusy = busyRanges.find((r) => r.start > startTime + 1000);
+    const busyRanges = getBusyRanges(includePlans);
+    const nextBusy = busyRanges.find((r) => r.start > startTime);
     const dayEndTime = new Date(selectedDate);
-    dayEndTime.setHours(END_HOUR, 0, 0, 0);
+    dayEndTime.setHours(includePlans ? END_HOUR : 24, 0, 0, 0);
     const limitTime = nextBusy ? nextBusy.start : dayEndTime.getTime();
     const availableMs = limitTime - startTime;
     const availableMinutes = Math.floor(availableMs / 60000);
@@ -355,10 +356,10 @@ const Timeline: React.FC<TimelineProps> = ({
     endTime: number,
     maxDesiredMinutes: number = 30,
   ): { start: number; duration: number } => {
-    const busyRanges = getBusyRanges().sort((a, b) => a.end - b.end);
+    const busyRanges = getBusyRanges(false).sort((a, b) => a.end - b.end);
     const prevBusy = busyRanges.filter((r) => r.end <= endTime - 1000).pop();
     const dayStartTime = new Date(selectedDate);
-    dayStartTime.setHours(START_HOUR, 0, 0, 0);
+    dayStartTime.setHours(0, 0, 0, 0);
     const limitTime = prevBusy ? prevBusy.end : dayStartTime.getTime();
     const availableMs = endTime - limitTime;
     const availableMinutes = Math.floor(availableMs / 60000);
@@ -373,9 +374,9 @@ const Timeline: React.FC<TimelineProps> = ({
 
   const clampManualEntryRange = (startTime: number, endTime: number) => {
     const dayStartTime = new Date(selectedDate);
-    dayStartTime.setHours(START_HOUR, 0, 0, 0);
+    dayStartTime.setHours(0, 0, 0, 0);
     const dayEndTime = new Date(selectedDate);
-    dayEndTime.setHours(END_HOUR, 0, 0, 0);
+    dayEndTime.setHours(24, 0, 0, 0);
 
     const clampedStart = Math.max(startTime, dayStartTime.getTime());
     const clampedEnd = Math.min(endTime, dayEndTime.getTime());
@@ -945,7 +946,7 @@ const Timeline: React.FC<TimelineProps> = ({
           }
           onLog={() => {
             const start = gapMenu.session.endTime || Date.now();
-            const duration = calculateSafeDuration(start, 30);
+            const duration = calculateSafeDuration(start, 30, false);
             const range = clampManualEntryRange(
               start,
               start + duration * 60000,
