@@ -469,3 +469,100 @@ test(
     cleanup();
   },
 );
+
+test("day review shows readable notes, finds off-hours entries, and exports the full day while filtered", async () => {
+  const late = new Date(today);
+  late.setHours(21, 0, 0, 0);
+  await setManyStores({
+    sessions: [
+      ...fixture.sessions,
+      {
+        id: "late",
+        clientId: "legacy-client",
+        customTitle: "Evening support",
+        startTime: late.getTime(),
+        endTime: late.getTime() + 360000,
+      },
+    ],
+  });
+  await boot();
+  await user.click(screen.getByRole("button", { name: "My day" }));
+  const entry = screen.getByRole("button", {
+    name: "Edit time entry: Legacy Client - Existing rich notes",
+  });
+  assert.equal(entry.textContent, "Legacy Client - Existing rich notes");
+  await user.click(screen.getByRole("button", { name: "Agenda" }));
+  assert.ok(screen.getByText("Legacy Client - Evening support"));
+  await user.type(
+    screen.getByRole("searchbox", { name: "Find an entry" }),
+    "Evening",
+  );
+  assert.equal(screen.queryByText("Legacy Client - Existing rich notes"), null);
+  await user.click(screen.getByRole("button", { name: "Export day CSV" }));
+  const csv = await downloads.at(-1)!.blob.text();
+  assert.ok(csv.includes("Existing rich notes"));
+  assert.ok(csv.includes("Evening support"));
+  const stored = (await getAllStores()).sessions;
+  assert.ok(Array.isArray(stored));
+  assert.equal(stored.length, 2);
+});
+
+test("gap actions escape the timeline stack, dismiss with Escape, and cannot backdate over a later entry", async () => {
+  const Timeline = (await import("../components/Timeline")).default;
+  const first = {
+    id: "first",
+    clientId: "legacy-client",
+    customTitle: "First",
+    startTime: today.getTime(),
+    endTime: today.getTime() + 360000,
+  };
+  const second = {
+    ...first,
+    id: "second",
+    startTime: today.getTime() + 20 * 60000,
+    endTime: today.getTime() + 26 * 60000,
+  };
+  let logged: number[] = [];
+  render(
+    <Timeline
+      sessions={[first, second]}
+      clients={fixture.clients}
+      tasks={[]}
+      subtasks={[]}
+      plannedActivities={[]}
+      recurringActivities={[]}
+      onAddPlan={() => {}}
+      onToggleLog={() => {}}
+      onStartTimer={() => assert.fail("must not start over a later entry")}
+      onDeletePlan={() => {}}
+      onEditSession={() => {}}
+      onPreviewTask={() => {}}
+      onManualEntry={(start, end) => {
+        logged = [start, end];
+      }}
+      onUpdatePlan={() => {}}
+      onEditPlan={() => {}}
+    />,
+  );
+  const trigger = screen.getAllByTitle("Fill gap after")[0];
+  await user.click(trigger);
+  const actions = screen.getByRole("group", { name: "Fill gap actions" });
+  assert.equal(actions.parentElement, document.body);
+  assert.equal(
+    within(actions).queryByRole("button", { name: "Start Timer" }),
+    null,
+  );
+  assert.equal(
+    document.activeElement,
+    within(actions).getByRole("button", { name: "Manual Log" }),
+  );
+  await user.keyboard("{Escape}");
+  assert.equal(screen.queryByRole("group", { name: "Fill gap actions" }), null);
+  assert.equal(document.activeElement, trigger);
+  await user.click(trigger);
+  await user.click(screen.getByRole("button", { name: "Manual Log" }));
+  assert.deepEqual(logged, [first.endTime, second.startTime]);
+  await user.click(trigger);
+  await user.click(screen.getByRole("button", { name: "Previous day" }));
+  assert.equal(screen.queryByRole("group", { name: "Fill gap actions" }), null);
+});

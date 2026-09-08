@@ -1,3 +1,5 @@
+import GapActions from "./ui/GapActions";
+import { durationLabel } from "../services/workspaceMetrics";
 import { downloadDayCsv } from "../services/dayExport";
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -12,11 +14,8 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  Play,
   CheckSquare,
   Square,
-  MoreVertical,
-  Zap,
   Calendar,
   Trash2,
   Repeat,
@@ -67,7 +66,15 @@ const Timeline: React.FC<TimelineProps> = ({
 }) => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [currentTimeSydney, setCurrentTimeSydney] = useState("");
-  const [gapMenuSessionId, setGapMenuSessionId] = useState<string | null>(null);
+  const [gapMenu, setGapMenu] = useState<{
+    session: TimerSession;
+    anchor: HTMLButtonElement;
+  } | null>(null);
+  const [view, setView] = useState<"timeline" | "agenda">("timeline");
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    setGapMenu(null);
+  }, [selectedDate, view]);
   const [pixelsPerHour, setPixelsPerHour] = useState(120);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -339,7 +346,9 @@ const Timeline: React.FC<TimelineProps> = ({
     const limitTime = nextBusy ? nextBusy.start : dayEndTime.getTime();
     const availableMs = limitTime - startTime;
     const availableMinutes = Math.floor(availableMs / 60000);
-    return Math.max(5, Math.min(maxDesiredMinutes, availableMinutes));
+    if (busyRanges.some((r) => r.start <= startTime && r.end > startTime))
+      return 0;
+    return Math.max(0, Math.min(maxDesiredMinutes, availableMinutes));
   };
 
   const calculateSafeStartBefore = (
@@ -353,7 +362,11 @@ const Timeline: React.FC<TimelineProps> = ({
     const limitTime = prevBusy ? prevBusy.end : dayStartTime.getTime();
     const availableMs = endTime - limitTime;
     const availableMinutes = Math.floor(availableMs / 60000);
-    const duration = Math.max(5, Math.min(maxDesiredMinutes, availableMinutes));
+    const duration = busyRanges.some(
+      (r) => r.start < endTime && r.end > endTime,
+    )
+      ? 0
+      : Math.max(0, Math.min(maxDesiredMinutes, availableMinutes));
     const start = endTime - duration * 60 * 1000;
     return { start, duration };
   };
@@ -385,7 +398,8 @@ const Timeline: React.FC<TimelineProps> = ({
     clickedDate.setMilliseconds(0);
 
     const safeDuration = calculateSafeDuration(clickedDate.getTime(), 30);
-    onAddPlan(dateKey, clickedDate.getTime(), safeDuration);
+    if (safeDuration > 0)
+      onAddPlan(dateKey, clickedDate.getTime(), safeDuration);
   };
 
   const now = new Date();
@@ -402,6 +416,37 @@ const Timeline: React.FC<TimelineProps> = ({
     tmp.innerHTML = html;
     return tmp.textContent || tmp.innerText || "";
   };
+
+  const formatTime = (time: number) =>
+    new Date(time).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  const sessionTitle = (session: TimerSession) => {
+    const task = tasks.find((t) => t.id === session.taskId);
+    const client = clients.find(
+      (c) => c.id === (task?.clientId || session.clientId),
+    );
+    const subtask = subtasks.find((s) => s.id === session.subtaskId);
+    const description =
+      stripHtml(session.notes || "").trim() ||
+      subtask?.title ||
+      task?.title ||
+      session.customTitle ||
+      "Unallocated";
+    return `${client?.name || "Unallocated"} - ${description}`;
+  };
+  const agendaSessions = daySessions.filter((session) => {
+    const task = tasks.find((t) => t.id === session.taskId);
+    return `${sessionTitle(session)} ${task?.title || ""} ${task?.ticketNumber || ""}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase());
+  });
+  const loggedSeconds = daySessions.reduce(
+    (sum, s) =>
+      sum + (s.endTime ? Math.max(0, s.endTime - s.startTime) / 1000 : 0),
+    0,
+  );
 
   return (
     <div
@@ -512,370 +557,403 @@ const Timeline: React.FC<TimelineProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 timeline-stage border border-line rounded-xl relative overflow-hidden flex flex-col">
-        <div
-          ref={scrollContainerRef}
-          className="overflow-y-auto flex-1 relative"
-        >
-          <div className="absolute top-0 left-0 right-0 pointer-events-none z-0">
-            {Array.from({ length: END_HOUR - START_HOUR + 1 }).map((_, i) => {
-              const hour = START_HOUR + i;
-              return (
-                <div
-                  key={hour}
-                  className="flex items-center border-b border-line/50 box-border absolute w-full"
-                  style={{ top: i * pixelsPerHour, height: pixelsPerHour }}
-                >
-                  <div
-                    className="w-16 text-right pr-4 text-xs font-mono text-quiet"
-                    style={{ marginTop: `-${pixelsPerHour - 16}px` }}
-                  >
-                    {hour > 12
-                      ? `${hour - 12} PM`
-                      : hour === 12
-                        ? "12 PM"
-                        : `${hour} AM`}
-                  </div>
-                  <div className="flex-1 border-t border-line/30"></div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div
-            className="relative w-full ml-16"
-            style={{ height: TOTAL_HEIGHT }}
-            onClick={handleBackgroundClick}
+      <div className="day-review-tools">
+        <div role="group" aria-label="Day view" className="day-view-switch">
+          <button
+            aria-pressed={view === "timeline"}
+            onClick={() => setView("timeline")}
           >
-            {isToday &&
-              currentHours >= START_HOUR &&
-              currentHours <= END_HOUR && (
-                <div
-                  className="absolute left-0 right-0 z-30 flex items-center pointer-events-none"
-                  style={{ top: currentTimeTop }}
-                >
-                  <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 shadow-[0_0_10px_rgba(239,68,68,0.8)]"></div>
-                  <div className="h-px bg-red-500 flex-1 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
-                </div>
-              )}
-
-            {dayPlans.map((plan) => {
-              const isDragging = dragState?.id === plan.id;
-              const startTime =
-                isDragging && optimisticStartTime
-                  ? optimisticStartTime
-                  : plan.startTime;
-              const endTime = startTime + plan.durationMinutes * 60 * 1000;
-              const { top, height } = getPosition(startTime, endTime);
-
-              if (top < 0 || top > TOTAL_HEIGHT) return null;
-
-              const task = plan.taskId
-                ? tasks.find((t) => t.id === plan.taskId)
-                : null;
-              let client = task
-                ? clients.find((c) => c.id === task.clientId)
-                : null;
-              if (!client && plan.clientId)
-                client = clients.find((c) => c.id === plan.clientId) || null;
-              const isGhost = plan.id.startsWith("ghost_");
-
-              return (
-                <div
-                  key={plan.id}
-                  onMouseDown={(e) => handlePlanMouseDown(e, plan)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (plan.type === "task" && task && !isGhost)
-                      onPreviewTask(task);
-                  }}
-                  className={`absolute left-2 right-2 md:right-1/2 rounded-lg border-2 p-2 transition-all group z-10 flex flex-col overflow-hidden hover:z-50 hover:bg-surface ${
-                    plan.isLogged
-                      ? "border-dashed border-emerald-500/30 bg-emerald-500/5 opacity-60 cursor-default"
-                      : isDragging
-                        ? "border-solid border-indigo-400 bg-surface shadow-xl z-50 scale-[1.02] cursor-move"
-                        : isGhost
-                          ? "border-dashed border-indigo-500/50 bg-indigo-500/10 hover:border-indigo-400 cursor-move"
-                          : "border-dashed border-line bg-surface/40 hover:border-indigo-400 cursor-move"
-                  }`}
-                  style={{ top, height: Math.max(height, 40) }}
-                >
-                  <div className="flex justify-between items-start pointer-events-none">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        {plan.type === "quick" && !client ? (
-                          <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1 rounded uppercase font-bold">
-                            Quick
-                          </span>
-                        ) : (
-                          <span
-                            className="text-[10px] bg-inset text-body px-1 rounded uppercase font-bold"
-                            style={{ color: client?.color }}
-                          >
-                            {client?.name}
-                          </span>
-                        )}
-                        <span className="text-xs text-muted font-mono">
-                          {new Date(startTime).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        {isGhost && (
-                          <span
-                            className="text-indigo-400"
-                            title="Recurring Activity"
-                          >
-                            <Repeat size={12} />
-                          </span>
-                        )}
-                      </div>
-                      <h4
-                        className={`text-sm font-medium mt-0.5 truncate ${plan.isLogged ? "line-through text-quiet" : "text-ink"}`}
-                      >
-                        {plan.type === "task" ? task?.title : plan.quickTitle}
-                      </h4>
+            Timeline
+          </button>
+          <button
+            aria-pressed={view === "agenda"}
+            onClick={() => setView("agenda")}
+          >
+            Agenda
+          </button>
+        </div>
+        <p>
+          <strong>{durationLabel(loggedSeconds)}</strong> recorded ·{" "}
+          {daySessions.length} entries ·{" "}
+          {dayPlans.filter((p) => !p.isLogged).length} plans remaining
+        </p>
+      </div>
+      {view === "agenda" ? (
+        <section className="day-agenda" aria-label="Day entries">
+          <label className="agenda-search">
+            Find an entry
+            <input
+              type="search"
+              placeholder="Client, description or ticket…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          <p className="text-sm text-muted">
+            {agendaSessions.length} of {daySessions.length} entries · CSV export
+            always includes the whole day.
+          </p>
+          {agendaSessions.length === 0 && (
+            <p className="agenda-empty">
+              {daySessions.length
+                ? "No matching entries. Try another search."
+                : "No time recorded for this day. Use Log time to add an entry."}
+            </p>
+          )}
+          {agendaSessions.map((session) => (
+            <button
+              key={session.id}
+              className="agenda-entry"
+              onClick={() => onEditSession(session)}
+            >
+              <span className="agenda-time">
+                {formatTime(session.startTime)} –{" "}
+                {session.endTime ? formatTime(session.endTime) : "Now"}
+              </span>
+              <strong>{sessionTitle(session)}</strong>
+              <span>
+                {session.endTime
+                  ? durationLabel((session.endTime - session.startTime) / 1000)
+                  : "Running"}
+                <Pencil size={14} />
+              </span>
+            </button>
+          ))}
+        </section>
+      ) : (
+        <div className="flex-1 timeline-stage border border-line rounded-xl relative overflow-hidden flex flex-col">
+          <div
+            ref={scrollContainerRef}
+            className="overflow-y-auto flex-1 relative"
+          >
+            <div className="absolute top-0 left-0 right-0 pointer-events-none z-0">
+              {Array.from({ length: END_HOUR - START_HOUR + 1 }).map((_, i) => {
+                const hour = START_HOUR + i;
+                return (
+                  <div
+                    key={hour}
+                    className="flex items-center border-b border-line/50 box-border absolute w-full"
+                    style={{ top: i * pixelsPerHour, height: pixelsPerHour }}
+                  >
+                    <div
+                      className="w-16 text-right pr-4 text-xs font-mono text-quiet"
+                      style={{ marginTop: `-${pixelsPerHour - 16}px` }}
+                    >
+                      {hour > 12
+                        ? `${hour - 12} PM`
+                        : hour === 12
+                          ? "12 PM"
+                          : `${hour} AM`}
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-canvas/80 rounded p-1 pointer-events-auto">
-                      {!plan.isLogged && (
+                    <div className="flex-1 border-t border-line/30"></div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div
+              className="relative ml-16"
+              style={{ height: TOTAL_HEIGHT }}
+              onClick={handleBackgroundClick}
+            >
+              {isToday &&
+                currentHours >= START_HOUR &&
+                currentHours <= END_HOUR && (
+                  <div
+                    className="absolute left-0 right-0 z-30 flex items-center pointer-events-none"
+                    style={{ top: currentTimeTop }}
+                  >
+                    <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 shadow-[0_0_10px_rgba(239,68,68,0.8)]"></div>
+                    <div className="h-px bg-red-500 flex-1 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+                  </div>
+                )}
+
+              {dayPlans.map((plan) => {
+                const isDragging = dragState?.id === plan.id;
+                const startTime =
+                  isDragging && optimisticStartTime
+                    ? optimisticStartTime
+                    : plan.startTime;
+                const endTime = startTime + plan.durationMinutes * 60 * 1000;
+                const { top, height } = getPosition(startTime, endTime);
+
+                if (top < 0 || top > TOTAL_HEIGHT) return null;
+
+                const task = plan.taskId
+                  ? tasks.find((t) => t.id === plan.taskId)
+                  : null;
+                let client = task
+                  ? clients.find((c) => c.id === task.clientId)
+                  : null;
+                if (!client && plan.clientId)
+                  client = clients.find((c) => c.id === plan.clientId) || null;
+                const isGhost = plan.id.startsWith("ghost_");
+
+                return (
+                  <div
+                    key={plan.id}
+                    onMouseDown={(e) => handlePlanMouseDown(e, plan)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (plan.type === "task" && task && !isGhost)
+                        onPreviewTask(task);
+                    }}
+                    className={`absolute left-2 right-2 md:right-1/2 rounded-lg border-2 px-2 py-1 transition-all group z-10 flex flex-col overflow-hidden hover:z-50 hover:bg-surface ${
+                      plan.isLogged
+                        ? "border-dashed border-emerald-500/30 bg-emerald-500/5 opacity-60 cursor-default"
+                        : isDragging
+                          ? "border-solid border-indigo-400 bg-surface shadow-xl z-50 scale-[1.02] cursor-move"
+                          : isGhost
+                            ? "border-dashed border-indigo-500/50 bg-indigo-500/10 hover:border-indigo-400 cursor-move"
+                            : "border-dashed border-line bg-surface/40 hover:border-indigo-400 cursor-move"
+                    }`}
+                    style={{ top, height: Math.max(height, 40) }}
+                  >
+                    <div className="flex justify-between items-start pointer-events-none">
+                      <div className="min-w-0">
+                        <h4
+                          className={`text-sm font-medium truncate ${plan.isLogged ? "line-through text-quiet" : "text-ink"}`}
+                        >
+                          {client?.name || "Unallocated"} -{" "}
+                          {plan.type === "task"
+                            ? task?.title || "Untitled task"
+                            : plan.quickTitle || "Planned activity"}
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          {plan.type === "quick" && !client ? (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1 rounded uppercase font-bold">
+                              Quick
+                            </span>
+                          ) : (
+                            <span
+                              className="text-[10px] bg-inset text-body px-1 rounded uppercase font-bold"
+                              style={{ color: client?.color }}
+                            >
+                              {client?.name}
+                            </span>
+                          )}
+                          <span className="text-xs text-muted font-mono">
+                            {new Date(startTime).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          {isGhost && (
+                            <span
+                              className="text-indigo-400"
+                              title="Recurring Activity"
+                            >
+                              <Repeat size={12} />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-canvas/80 rounded p-1 pointer-events-auto">
+                        {!plan.isLogged && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditPlan(plan);
+                            }}
+                            className="p-1 text-muted hover:text-ink"
+                            title="Edit Plan"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onEditPlan(plan);
+                            onToggleLog(plan.id);
                           }}
-                          className="p-1 text-muted hover:text-ink"
-                          title="Edit Plan"
+                          className={`p-1 rounded ${plan.isLogged ? "text-emerald-400" : "text-muted hover:text-ink"}`}
+                          title={
+                            plan.isLogged
+                              ? "Mark as not logged"
+                              : "Log as completed"
+                          }
                         >
-                          <Pencil size={16} />
+                          {plan.isLogged ? (
+                            <CheckSquare size={16} />
+                          ) : (
+                            <Square size={16} />
+                          )}
                         </button>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleLog(plan.id);
-                        }}
-                        className={`p-1 rounded ${plan.isLogged ? "text-emerald-400" : "text-muted hover:text-ink"}`}
-                        title={
-                          plan.isLogged
-                            ? "Mark as not logged"
-                            : "Log as completed"
-                        }
-                      >
-                        {plan.isLogged ? (
-                          <CheckSquare size={16} />
-                        ) : (
-                          <Square size={16} />
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeletePlan(plan.id);
-                        }}
-                        className="p-1 text-muted hover:text-red-400"
-                        title={
-                          isGhost ? "Delete Recurring Rule" : "Delete Plan"
-                        }
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeletePlan(plan.id);
+                          }}
+                          className="p-1 text-muted hover:text-red-400"
+                          title={
+                            isGhost ? "Delete Recurring Rule" : "Delete Plan"
+                          }
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
 
-            {daySessions.map((session, index) => {
-              const duration =
-                (session.endTime || Date.now()) - session.startTime;
-              const displayEndTime = session.endTime || Date.now();
-              const { top, height } = getPosition(
-                session.startTime,
-                displayEndTime,
-              );
+              {daySessions.map((session, index) => {
+                const duration =
+                  (session.endTime || Date.now()) - session.startTime;
+                const displayEndTime = session.endTime || Date.now();
+                const { top, height } = getPosition(
+                  session.startTime,
+                  displayEndTime,
+                );
 
-              if (top < 0) return null;
+                if (top < 0) return null;
 
-              const task = session.taskId
-                ? tasks.find((t) => t.id === session.taskId)
-                : null;
-              let client = task
-                ? clients.find((c) => c.id === task.clientId)
-                : null;
-              if (!client && session.clientId)
-                client = clients.find((c) => c.id === session.clientId) || null;
-              const subtask = session.subtaskId
-                ? subtasks.find((s) => s.id === session.subtaskId)
-                : null;
-              const isSmall = height < 40;
-              const GAP_THRESHOLD = 5 * 60 * 1000;
-              const prevSession = index > 0 ? daySessions[index - 1] : null;
-              const nextSession =
-                index < daySessions.length - 1 ? daySessions[index + 1] : null;
-              const hasGapBefore =
-                !prevSession ||
-                session.startTime -
-                  (prevSession.endTime || prevSession.startTime) >
-                  GAP_THRESHOLD;
-              const hasGapAfter =
-                !nextSession ||
-                nextSession.startTime - displayEndTime > GAP_THRESHOLD;
+                const task = session.taskId
+                  ? tasks.find((t) => t.id === session.taskId)
+                  : null;
+                let client = task
+                  ? clients.find((c) => c.id === task.clientId)
+                  : null;
+                if (!client && session.clientId)
+                  client =
+                    clients.find((c) => c.id === session.clientId) || null;
+                const isSmall = height < 40;
+                const GAP_THRESHOLD = 5 * 60 * 1000;
+                const prevSession = index > 0 ? daySessions[index - 1] : null;
+                const nextSession =
+                  index < daySessions.length - 1
+                    ? daySessions[index + 1]
+                    : null;
+                const hasGapBefore =
+                  !prevSession ||
+                  session.startTime -
+                    Math.max(
+                      ...daySessions
+                        .slice(0, index)
+                        .map((s) => s.endTime || Date.now()),
+                    ) >
+                    GAP_THRESHOLD;
+                const hasGapAfter =
+                  (!nextSession ||
+                    nextSession.startTime - displayEndTime > GAP_THRESHOLD) &&
+                  !daySessions.some(
+                    (s) =>
+                      s.id !== session.id &&
+                      s.startTime <= displayEndTime &&
+                      (s.endTime || Date.now()) > displayEndTime,
+                  );
 
-              return (
-                <div
-                  key={session.id}
-                  className="absolute left-6 right-6 md:left-[52%] md:right-4 group z-20"
-                  style={{ top, height: Math.max(height, 24) }}
-                >
-                  {hasGapBefore && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const { start, duration } = calculateSafeStartBefore(
-                          session.startTime,
-                          30,
-                        );
-                        const clamped = clampManualEntryRange(
-                          start,
-                          start + duration * 60 * 1000,
-                        );
-                        if (clamped) onManualEntry(clamped.start, clamped.end);
-                      }}
-                      className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 w-6 h-6 bg-inset hover:bg-indigo-600 rounded-full text-ink shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
-                      title="Fill gap before (Manual Entry)"
-                    >
-                      <PlusCircle size={14} />
-                    </button>
-                  )}
-
-                  {hasGapAfter && (
-                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-30">
+                return (
+                  <div
+                    key={session.id}
+                    className="absolute left-6 right-6 md:left-[52%] md:right-4 group z-20"
+                    style={{ top, height: Math.max(height, 24) }}
+                  >
+                    {hasGapBefore && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setGapMenuSessionId(session.id);
+                          const { start, duration } = calculateSafeStartBefore(
+                            session.startTime,
+                            30,
+                          );
+                          const clamped = clampManualEntryRange(
+                            start,
+                            start + duration * 60 * 1000,
+                          );
+                          if (clamped)
+                            onManualEntry(clamped.start, clamped.end);
                         }}
-                        className="w-6 h-6 bg-inset hover:bg-emerald-600 rounded-full text-ink shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
-                        title="Fill gap after"
+                        className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 w-6 h-6 bg-inset hover:bg-indigo-600 rounded-full text-ink shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity transform hover:scale-110"
+                        title="Fill gap before (Manual Entry)"
                       >
                         <PlusCircle size={14} />
                       </button>
-                      {gapMenuSessionId === session.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-40"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setGapMenuSessionId(null);
-                            }}
-                          ></div>
-                          <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-surface border border-line rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 w-32 animate-in fade-in zoom-in-95 duration-100">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onStartTimer(
-                                  undefined,
-                                  undefined,
-                                  displayEndTime,
-                                );
-                                setGapMenuSessionId(null);
-                              }}
-                              className="flex items-center gap-2 px-2 py-1.5 text-xs text-body hover:text-ink hover:bg-indigo-600 rounded transition-colors text-left"
-                            >
-                              <Play size={12} /> Start Timer
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const safeDuration = calculateSafeDuration(
-                                  displayEndTime,
-                                  30,
-                                );
-                                const clamped = clampManualEntryRange(
-                                  displayEndTime,
-                                  displayEndTime + safeDuration * 60 * 1000,
-                                );
-                                if (clamped)
-                                  onManualEntry(clamped.start, clamped.end);
-                                setGapMenuSessionId(null);
-                              }}
-                              className="flex items-center gap-2 px-2 py-1.5 text-xs text-body hover:text-ink hover:bg-emerald-600 rounded transition-colors text-left"
-                            >
-                              <CheckSquare size={12} /> Manual Log
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
+                    )}
 
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditSession(session);
-                    }}
-                    className="w-full h-full rounded-lg shadow-lg border-l-4 overflow-hidden hover:z-50 transition-all hover:scale-[1.01] cursor-pointer"
-                    style={{
-                      backgroundColor: "#1e293b",
-                      borderColor:
-                        client?.color ||
-                        (session.customTitle ? "#10b981" : "#94a3b8"),
-                    }}
-                    title="Click to edit session"
-                  >
-                    <div
-                      className={`h-full w-full bg-opacity-10 p-2 flex flex-col justify-center ${isSmall ? "flex-row items-center justify-start gap-2" : ""}`}
-                      style={{
-                        backgroundColor: client?.color
-                          ? `${client.color}15`
-                          : session.customTitle
-                            ? "#10b98115"
-                            : undefined,
+                    {hasGapAfter && (
+                      <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-30">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setGapMenu(
+                              gapMenu?.session.id === session.id
+                                ? null
+                                : { session, anchor: e.currentTarget },
+                            );
+                          }}
+                          className="w-6 h-6 bg-inset hover:bg-emerald-600 rounded-full text-ink shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity transform hover:scale-110"
+                          title="Fill gap after"
+                          aria-expanded={gapMenu?.session.id === session.id}
+                          aria-controls={
+                            gapMenu?.session.id === session.id
+                              ? "gap-actions"
+                              : undefined
+                          }
+                        >
+                          <PlusCircle size={14} />
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditSession(session);
                       }}
+                      className={`session-card ${isSmall ? "compact" : ""}`}
+                      style={{ borderColor: client?.color || "#53744b" }}
+                      title={`${sessionTitle(session)} • ${formatTime(session.startTime)} – ${session.endTime ? formatTime(session.endTime) : "Now"}`}
+                      aria-label={`Edit time entry: ${sessionTitle(session)}`}
                     >
+                      <strong>{sessionTitle(session)}</strong>
                       {!isSmall && (
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] uppercase font-bold text-muted">
-                            {client?.name || "Quick Log"}
-                          </span>
-                          <span className="text-[10px] font-mono text-quiet">
-                            {new Date(session.startTime).toLocaleTimeString(
-                              [],
-                              { hour: "2-digit", minute: "2-digit" },
-                            )}{" "}
-                            -{" "}
-                            {session.endTime
-                              ? new Date(session.endTime).toLocaleTimeString(
-                                  [],
-                                  { hour: "2-digit", minute: "2-digit" },
-                                )
-                              : "Now"}
-                          </span>
-                        </div>
+                        <span className="session-meta">
+                          {formatTime(session.startTime)} –{" "}
+                          {session.endTime
+                            ? formatTime(session.endTime)
+                            : "Now"}{" "}
+                          · {durationLabel(duration / 1000)}
+                          {session.isManualLog ? " · Manual" : ""}
+                        </span>
                       )}
-                      <h4 className="text-sm font-semibold text-ink truncate leading-tight">
-                        {subtask
-                          ? subtask.title
-                          : task?.title || session.customTitle || "Unallocated"}
-                      </h4>
-                      {!isSmall && session.notes && (
-                        <p className="text-xs text-quiet truncate mt-1">
-                          {stripHtml(session.notes)}
-                        </p>
-                      )}
-                      {session.isManualLog && (
-                        <div className="absolute top-1 right-1 text-quiet">
-                          <CheckSquare size={12} />
-                        </div>
-                      )}
-                    </div>
+                    </button>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+      {gapMenu && (
+        <GapActions
+          anchor={gapMenu.anchor}
+          onClose={() => setGapMenu(null)}
+          onStart={
+            isToday &&
+            !!gapMenu.session.endTime &&
+            gapMenu.session.endTime <= Date.now() &&
+            !sessions.some(
+              (s) =>
+                s.id !== gapMenu.session.id &&
+                (s.endTime || Date.now()) > gapMenu.session.endTime!,
+            )
+              ? () =>
+                  onStartTimer(undefined, undefined, gapMenu.session.endTime)
+              : undefined
+          }
+          onLog={() => {
+            const start = gapMenu.session.endTime || Date.now();
+            const duration = calculateSafeDuration(start, 30);
+            const range = clampManualEntryRange(
+              start,
+              start + duration * 60000,
+            );
+            if (range) onManualEntry(range.start, range.end);
+          }}
+        />
+      )}
     </div>
   );
 };
