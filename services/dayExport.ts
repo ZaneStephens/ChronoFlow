@@ -24,14 +24,18 @@ export function buildDayCsv(
         ? session.notes.replace(/<[^>]*>?/gm, "")
         : "";
       return [
-        task?.ticketNumber || "",
+        task?.ticketNumber || session.ticketNumber || "",
         client?.name || "Quick Entry",
         new Date(session.startTime).toLocaleDateString(),
         time(session.startTime),
         time(session.endTime!),
         subtask
           ? subtask.title
-          : notes || session.customTitle || task?.title || "No Desc",
+          : session.subtaskTitle ||
+            notes ||
+            session.customTitle ||
+            task?.title ||
+            "No Desc",
       ];
     });
   rows.sort((a, b) => a[1].localeCompare(b[1]));

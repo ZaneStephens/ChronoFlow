@@ -34,6 +34,8 @@ export interface Task {
 }
 
 export interface TimerSession {
+  ticketNumber?: string; // Retained when the source task is deleted
+  subtaskTitle?: string; // Historical CSV description for a removed subtask
   id: string;
   taskId?: string; 
   subtaskId?: string; 

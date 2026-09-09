@@ -207,6 +207,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const deleteTask = (taskId: string) => {
         setTasks(prev => prev.filter(t => t.id !== taskId));
         setSubtasks(prev => prev.filter(s => s.taskId !== taskId));
+        setPlannedActivities(prev => prev.filter(p => p.taskId !== taskId));
+        setRecurringActivities(prev => prev.filter(r => r.taskId !== taskId));
     };
 
     // Subtasks

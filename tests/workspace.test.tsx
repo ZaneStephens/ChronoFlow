@@ -680,3 +680,78 @@ test("account manager edits persist and new logs default to Quick even with exis
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   assert.deepEqual((await getAllStores()).sessions, fixture.sessions);
 });
+
+test("visible task deletion removes stored work and plans while preserving historical CSV exactly", async () => {
+  const { buildDayCsv } = await import("../services/dayExport");
+  const original = [
+    fixture.sessions[0],
+    {
+      ...fixture.sessions[0],
+      id: "step-session",
+      subtaskId: "step",
+      notes: "<p>Keep these notes too</p>",
+    },
+  ];
+  const step = {
+    id: "step",
+    taskId: "legacy-task",
+    title: "Recorded step",
+    isCompleted: true,
+    totalTime: 360,
+  };
+  const plan = { ...fixture.plannedActivities[0], taskId: "legacy-task" };
+  const rule = { ...fixture.recurringActivities[0], taskId: "legacy-task" };
+  await setManyStores({
+    sessions: original,
+    subtasks: [step],
+    plannedActivities: [plan],
+    recurringActivities: [rule],
+  });
+  const before = buildDayCsv(
+    original,
+    fixture.tasks as import("../types").Task[],
+    fixture.clients,
+    [step],
+  );
+  await boot();
+  await user.click(screen.getByRole("button", { name: /Tasks & tickets/ }));
+  await user.click(screen.getByRole("button", { name: "Delete Legacy task" }));
+  await user.click(screen.getByRole("button", { name: "Keep task" }));
+  assert.deepEqual((await getAllStores()).sessions, original);
+  await user.click(screen.getByRole("button", { name: "Delete Legacy task" }));
+  await user.click(
+    within(screen.getByRole("dialog", { name: "Delete this task?" })).getByRole(
+      "button",
+      { name: "Delete task" },
+    ),
+  );
+  await waitFor(async () => assert.deepEqual((await getAllStores()).tasks, []));
+  cleanup();
+  await boot();
+  const stored = await getAllStores();
+  assert.deepEqual(stored.tasks, []);
+  assert.deepEqual(stored.subtasks, []);
+  assert.deepEqual(stored.plannedActivities, []);
+  assert.deepEqual(stored.recurringActivities, []);
+  const history = stored.sessions as import("../types").TimerSession[];
+  assert.equal(history.length, 2);
+  assert.equal(history[0].taskId, undefined);
+  assert.equal(history[1].notes, original[1].notes);
+  assert.equal(buildDayCsv(history, [], fixture.clients, []), before);
+});
+
+test("a running task cannot be deleted", async () => {
+  await setManyStores({
+    activeTimer: { taskId: "legacy-task", startTime: Date.now() - 60000 },
+  });
+  await boot();
+  await user.click(screen.getByRole("button", { name: /Tasks & tickets/ }));
+  assert.equal(
+    (
+      screen.getByRole("button", {
+        name: "Delete Legacy task",
+      }) as HTMLButtonElement
+    ).disabled,
+    true,
+  );
+});

@@ -96,6 +96,39 @@ const InnerApp: React.FC = () => {
 
   const { showToast, requestConfirm } = useNotification();
 
+  const handleDeleteTask = (taskId: string) => {
+    if (activeTimer?.taskId === taskId) {
+      showToast("Stop the timer before deleting this task.", "error");
+      return;
+    }
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const history = sessions
+      .filter(
+        (s) =>
+          s.taskId === taskId ||
+          subtasks.some(
+            (step) => step.taskId === taskId && step.id === s.subtaskId,
+          ),
+      )
+      .map((session) => {
+        const step = subtasks.find((s) => s.id === session.subtaskId);
+        return {
+          ...session,
+          taskId: undefined,
+          subtaskId: undefined,
+          clientId: task.clientId || session.clientId,
+          projectId: session.projectId || task.projectId,
+          customTitle: session.customTitle || step?.title || task.title,
+          ticketNumber: task.ticketNumber || session.ticketNumber,
+          subtaskTitle: step?.title || session.subtaskTitle,
+        };
+      });
+    importSessionData({ sessions: history }, "merge");
+    deleteTask(taskId);
+    showToast("Task deleted. Recorded time has been kept.", "success");
+  };
+
   // --- Import State ---
   const [pendingImportData, setPendingImportData] = useState<any | null>(null);
 
@@ -916,7 +949,7 @@ const InnerApp: React.FC = () => {
                   activeTimer={activeTimer}
                   onAddTask={addTask}
                   onUpdateTask={updateTask}
-                  onDeleteTask={deleteTask}
+                  onDeleteTask={handleDeleteTask}
                   onAddSubtasks={addSubtasks}
                   onUpdateSubtask={(id, title) => {
                     const s = subtasks.find((x) => x.id === id);

@@ -221,6 +221,19 @@ const TaskBoard: React.FC<TaskBoardProps> = (props) => {
               </option>
             ))}
           </select>
+          <button
+            className="text-button danger"
+            aria-label={`Delete ${task.title}`}
+            disabled={running}
+            title={
+              running
+                ? "Stop the timer before deleting this task"
+                : "Delete task"
+            }
+            onClick={() => setPendingDelete(task)}
+          >
+            <Trash2 size={14} /> Delete
+          </button>
           {running && (
             <span className="tracking-label">
               <i />
@@ -302,13 +315,6 @@ const TaskBoard: React.FC<TaskBoardProps> = (props) => {
                   Ticket <ArrowUpRight size={14} />
                 </a>
               )}
-              <button
-                className="icon-button danger"
-                aria-label={`Delete ${task.title}`}
-                onClick={() => setPendingDelete(task)}
-              >
-                <Trash2 size={14} />
-              </button>
             </div>
           </div>
         )}
@@ -514,8 +520,9 @@ const TaskBoard: React.FC<TaskBoardProps> = (props) => {
           onClose={() => setPendingDelete(null)}
         >
           <p className="dialog-description">
-            “{pendingDelete.title}” and its subtasks will be removed. Existing
-            time entries stay in your history.
+            “{pendingDelete.title}”, its subtasks, linked plans and recurring
+            rules will be permanently removed. Recorded time and its client,
+            ticket and description stay in your history.
           </p>
           <div className="dialog-actions">
             <button
@@ -526,6 +533,7 @@ const TaskBoard: React.FC<TaskBoardProps> = (props) => {
             </button>
             <button
               className="button destructive"
+              disabled={activeTimer?.taskId === pendingDelete.id}
               onClick={() => {
                 onDeleteTask(pendingDelete.id);
                 setPendingDelete(null);
