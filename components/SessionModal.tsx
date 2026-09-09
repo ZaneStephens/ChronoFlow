@@ -1,3 +1,4 @@
+import ClientOptions from "./ui/ClientOptions";
 import Dialog from "./ui/Dialog";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TimerSession, Task, Subtask, Client, Project } from "../types";
@@ -50,7 +51,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
   // Allocation State
   const [isAllocating, setIsAllocating] = useState(false);
   const [allocType, setAllocType] = useState<"task" | "quick" | "project">(
-    "task",
+    "quick",
   );
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [quickClientId, setQuickClientId] = useState("");
@@ -82,9 +83,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
           setSelectedMilestoneId(initialData.milestoneId || "");
         } else {
           setIsAllocating(true);
-          setAllocType(
-            tasks.some((t) => t.status !== "done") ? "task" : "quick",
-          );
+          setAllocType("quick");
           setSelectedTaskId("");
           setQuickClientId("");
           setSelectedProjectId("");
@@ -538,11 +537,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
                   className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-ink text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                 >
                   <option value="">-- No Client (Personal/Admin) --</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  <ClientOptions clients={clients} />
                 </select>
               </div>
             )}

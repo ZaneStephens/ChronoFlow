@@ -1,3 +1,4 @@
+import ClientOptions from "./ui/ClientOptions";
 import React, { useState, useEffect, useMemo } from "react";
 import { Client, Task, TimerSession, Subtask } from "../types";
 import {
@@ -118,31 +119,6 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
       billableHours: totalBlocks * 0.1,
     };
   }, [selectedClientId, startDate, endDate, sessions, tasks]);
-
-  // --- Logic for Sorting and Top Clients ---
-  const sortedClients = useMemo(
-    () => [...clients].sort((a, b) => a.name.localeCompare(b.name)),
-    [clients],
-  );
-
-  const { topClients, otherClients } = useMemo(() => {
-    const counts: Record<string, number> = {};
-    // Use Task count for consistency
-    tasks.forEach((t) => (counts[t.clientId] = (counts[t.clientId] || 0) + 1));
-
-    const topIds = Object.keys(counts)
-      .filter((id) => counts[id] > 0)
-      .sort((a, b) => counts[b] - counts[a])
-      .slice(0, 3);
-
-    const top = topIds
-      .map((id) => clients.find((c) => c.id === id))
-      .filter((c): c is Client => !!c);
-    const other = sortedClients.filter((c) => !topIds.includes(c.id));
-
-    return { topClients: top, otherClients: other };
-  }, [tasks, clients, sortedClients]);
-  // ---
 
   // Reset selected task if client changes
   useEffect(() => {
@@ -324,22 +300,7 @@ const ReportGenerator: React.FC<ReportGeneratorProps> = ({
               className="w-full bg-canvas border border-line rounded-lg px-4 py-3 text-ink focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">-- Choose a Client --</option>
-              {topClients.length > 0 && (
-                <optgroup label="Frequently Used">
-                  {topClients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              <optgroup label="All Clients">
-                {otherClients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </optgroup>
+              <ClientOptions clients={clients} />
             </select>
           </div>
 

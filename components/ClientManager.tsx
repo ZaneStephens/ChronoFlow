@@ -28,6 +28,7 @@ export default function ClientManager({
   const [deleting, setDeleting] = useState<Client | null>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState("#62835c");
+  const [accountManager, setAccountManager] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [services, setServices] = useState("");
@@ -36,6 +37,7 @@ export default function ClientManager({
     setEditing(client || null);
     setName(client?.name || "");
     setColor(client?.color || "#62835c");
+    setAccountManager(client?.accountManager || "");
     setContactName(client?.contactName || "");
     setContactEmail(client?.contactEmail || "");
     setServices(client?.services || "");
@@ -48,6 +50,7 @@ export default function ClientManager({
     const values = {
       name: name.trim(),
       color,
+      accountManager: accountManager.trim() || undefined,
       contactName,
       contactEmail,
       services,
@@ -60,7 +63,7 @@ export default function ClientManager({
   const filtered = [...clients]
     .sort((a, b) => a.name.localeCompare(b.name))
     .filter((c) =>
-      `${c.name} ${c.contactName || ""} ${c.services || ""}`
+      `${c.name} ${c.accountManager || ""} ${c.contactName || ""} ${c.services || ""}`
         .toLowerCase()
         .includes(query.toLowerCase()),
     );
@@ -113,6 +116,11 @@ export default function ClientManager({
             <span className="status-pill">
               {client.isInternal ? "Internal team" : "Client workspace"}
             </span>
+            {!client.isInternal && (
+              <p className="client-contact">
+                Account manager: {client.accountManager || "Unassigned"}
+              </p>
+            )}
             <p className="client-contact">
               <UserRound size={14} />
               {client.contactName || "No contact added yet"}
@@ -203,6 +211,16 @@ export default function ClientManager({
               />{" "}
               This is an internal team
             </label>
+            {!isInternal && (
+              <label>
+                Account manager (optional)
+                <input
+                  value={accountManager}
+                  onChange={(e) => setAccountManager(e.target.value)}
+                  placeholder="e.g. Zane"
+                />
+              </label>
+            )}
             <div className="form-columns">
               <label>
                 Contact name

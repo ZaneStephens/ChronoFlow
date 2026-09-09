@@ -604,3 +604,79 @@ for (const hour of [13, 18]) {
     assert.deepEqual((await getAllStores()).plannedActivities, [plan]);
   });
 }
+
+test("client selectors group Internal first, managers descending and legacy clients last without changing IDs", async () => {
+  const ClientOptions = (await import("../components/ui/ClientOptions"))
+    .default;
+  const clients = [
+    { id: "a", name: "Client A", color: "red", accountManager: "Aaron" },
+    { id: "z2", name: "Client Z", color: "red", accountManager: " Zane " },
+    { id: "legacy", name: "Legacy", color: "red" },
+    { id: "b", name: "Client B", color: "red", accountManager: "Brandon" },
+    { id: "z1", name: "Client C", color: "red", accountManager: "Zane" },
+    {
+      id: "i",
+      name: "Internal team",
+      color: "red",
+      isInternal: true,
+      accountManager: "Aaron",
+    },
+  ];
+  const snapshot = JSON.stringify(clients);
+  render(
+    <select aria-label="Grouped clients">
+      <ClientOptions clients={clients} />
+    </select>,
+  );
+  const select = screen.getByLabelText("Grouped clients");
+  assert.deepEqual(
+    [...select.querySelectorAll("optgroup")].map((g) => g.label),
+    ["Internal", "Zane", "Brandon", "Aaron", "Unassigned"],
+  );
+  assert.deepEqual(
+    [...select.querySelectorAll("option")].map((o) => o.value),
+    ["i", "z1", "z2", "b", "a", "legacy"],
+  );
+  assert.equal(JSON.stringify(clients), snapshot);
+});
+
+test("account manager edits persist and new logs default to Quick even with existing tasks", async () => {
+  await boot();
+  await user.click(screen.getByRole("button", { name: "Clients" }));
+  await user.click(screen.getByRole("button", { name: "Edit Legacy Client" }));
+  await user.type(
+    screen.getByLabelText("Account manager (optional)"),
+    " Zane ",
+  );
+  await user.click(screen.getByRole("button", { name: "Save details" }));
+  await waitFor(async () =>
+    assert.equal(
+      ((await getAllStores()).clients as { accountManager?: string }[])[0]
+        .accountManager,
+      "Zane",
+    ),
+  );
+  cleanup();
+  await boot();
+  await user.click(screen.getByRole("button", { name: "Clients" }));
+  assert.ok(screen.getByText("Account manager: Zane"));
+  await user.click(screen.getByRole("button", { name: "Edit Legacy Client" }));
+  await user.click(screen.getByLabelText("This is an internal team"));
+  assert.equal(screen.queryByLabelText("Account manager (optional)"), null);
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await user.click(screen.getByRole("button", { name: "My day" }));
+  await user.click(
+    within(document.getElementById("timeline-view")!).getByRole("button", {
+      name: "Log time",
+    }),
+  );
+  assert.ok(screen.getByLabelText("Allocate to client"));
+  assert.equal(screen.queryByLabelText("Allocate to task"), null);
+  assert.ok(
+    within(screen.getByLabelText("Allocate to client")).getByRole("group", {
+      name: "Zane",
+    }),
+  );
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  assert.deepEqual((await getAllStores()).sessions, fixture.sessions);
+});

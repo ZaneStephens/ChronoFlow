@@ -4,6 +4,7 @@ export interface Client {
   id: string;
   name: string;
   color: string;
+  accountManager?: string; // Optional for legacy data and internal clients
   contactName?: string;
   contactEmail?: string;
   services?: string;

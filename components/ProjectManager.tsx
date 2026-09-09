@@ -1,3 +1,4 @@
+import ClientOptions from "./ui/ClientOptions";
 import React, { useState } from "react";
 import {
   Project,
@@ -580,11 +581,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                 className="w-full bg-canvas border border-line rounded-lg px-3 py-2 text-ink"
               >
                 <option value="">Select Client...</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                <ClientOptions clients={clients} />
               </select>
             </div>
             <div>

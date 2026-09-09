@@ -1,3 +1,4 @@
+import ClientOptions from "./ui/ClientOptions";
 import Dialog from "./ui/Dialog";
 import React, { useState, useEffect, useMemo } from "react";
 import {
@@ -62,30 +63,6 @@ const PlanModal: React.FC<PlanModalProps> = ({
   const [monthDay, setMonthDay] = useState<number>(1);
   const [nthWeek, setNthWeek] = useState<number>(1);
   const [nthWeekDay, setNthWeekDay] = useState<number>(1); // 1=Mon
-
-  // --- Logic for Sorting and Top Clients ---
-  const sortedClients = useMemo(
-    () => [...clients].sort((a, b) => a.name.localeCompare(b.name)),
-    [clients],
-  );
-
-  const { topClients, otherClients } = useMemo(() => {
-    const counts: Record<string, number> = {};
-    tasks.forEach((t) => (counts[t.clientId] = (counts[t.clientId] || 0) + 1));
-
-    const topIds = Object.keys(counts)
-      .filter((id) => counts[id] > 0)
-      .sort((a, b) => counts[b] - counts[a])
-      .slice(0, 3);
-
-    const top = topIds
-      .map((id) => clients.find((c) => c.id === id))
-      .filter((c): c is Client => !!c);
-    const other = sortedClients.filter((c) => !topIds.includes(c.id));
-
-    return { topClients: top, otherClients: other };
-  }, [tasks, clients, sortedClients]);
-  // ---
 
   useEffect(() => {
     if (isOpen) {
@@ -535,53 +512,15 @@ const PlanModal: React.FC<PlanModalProps> = ({
                   <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wider">
                     Filter by Client
                   </label>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    <button
-                      onClick={() => setFilterClient("all")}
-                      className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterClient === "all" ? "bg-inset border-slate-500 text-ink" : "border-line text-quiet"}`}
-                    >
-                      All
-                    </button>
-
-                    {/* Top Clients */}
-                    {topClients.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => setFilterClient(c.id)}
-                        className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border transition-colors ${filterClient === c.id ? "text-ink border-current" : "border-line text-quiet"}`}
-                        style={{
-                          borderColor:
-                            filterClient === c.id ? c.color : undefined,
-                          backgroundColor:
-                            filterClient === c.id ? `${c.color}20` : undefined,
-                        }}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-
-                    {/* Divider */}
-                    {topClients.length > 0 && otherClients.length > 0 && (
-                      <div className="w-px h-5 bg-inset mx-1 self-center"></div>
-                    )}
-
-                    {/* Other Clients */}
-                    {otherClients.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => setFilterClient(c.id)}
-                        className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border transition-colors ${filterClient === c.id ? "text-ink border-current" : "border-line text-quiet"}`}
-                        style={{
-                          borderColor:
-                            filterClient === c.id ? c.color : undefined,
-                          backgroundColor:
-                            filterClient === c.id ? `${c.color}20` : undefined,
-                        }}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
+                  <select
+                    aria-label="Filter planned tasks by client"
+                    value={filterClient}
+                    onChange={(e) => setFilterClient(e.target.value)}
+                    className="w-full bg-canvas border border-line rounded-lg px-3 py-2 text-ink"
+                  >
+                    <option value="all">All clients</option>
+                    <ClientOptions clients={clients} />
+                  </select>
                 </div>
 
                 <div>
@@ -637,22 +576,7 @@ const PlanModal: React.FC<PlanModalProps> = ({
                     className="w-full bg-canvas border border-line rounded-lg px-3 py-2 text-ink focus:ring-2 focus:ring-emerald-500 outline-none"
                   >
                     <option value="">-- No Client / Internal --</option>
-                    {topClients.length > 0 && (
-                      <optgroup label="Frequently Used">
-                        {topClients.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    <optgroup label="All Clients">
-                      {otherClients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </optgroup>
+                    <ClientOptions clients={clients} />
                   </select>
                 </div>
               </div>

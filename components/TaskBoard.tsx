@@ -1,3 +1,4 @@
+import ClientOptions from "./ui/ClientOptions";
 import React, { useState } from "react";
 import { Task, Subtask, Client, ActiveTimer } from "../types";
 import {
@@ -347,11 +348,7 @@ const TaskBoard: React.FC<TaskBoardProps> = (props) => {
           onChange={(e) => setClientFilter(e.target.value)}
         >
           <option value="all">All clients</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
+          <ClientOptions clients={clients} />
         </select>
         <div className="segmented-control" aria-label="Task layout">
           <button
@@ -456,11 +453,7 @@ const TaskBoard: React.FC<TaskBoardProps> = (props) => {
                   <option value="" disabled>
                     Select a client
                   </option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  <ClientOptions clients={clients} />
                 </select>
               </label>
               <label>
